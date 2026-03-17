@@ -1,0 +1,8 @@
+Neo4j browser: http://localhost:7474
+
+Username: neo4j
+Password: graphrlsec123
+
+(Docker Compose mein set hai — NEO4J_AUTH=neo4j/graphrlsec123)
+
+Ab consumer chalaata hun:

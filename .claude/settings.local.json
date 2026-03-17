@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source venv/Scripts/activate)",
+      "Bash(python -c \"import torch; print\\(torch.__version__\\)\")",
+      "Bash(where python:*)"
+    ]
+  }
+}

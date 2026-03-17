@@ -1,0 +1,109 @@
+[project]
+name = "graphrl-sec"
+version = "0.1.0"
+description = "Adaptive Cybersecurity Threat Intelligence System using GNN + Deep RL"
+requires-python = ">=3.10,<3.12"
+readme = "README.md"
+license = { text = "MIT" }
+
+# ============================================================
+# Ruff — Linter & formatter
+# ============================================================
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in default arguments (FastAPI pattern)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+# ============================================================
+# Mypy — Static type checking
+# ============================================================
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+no_implicit_reexport = true
+show_error_codes = true
+ignore_missing_imports = true   # third-party stubs not always available
+
+# Per-module overrides for libraries without stubs
+[[tool.mypy.overrides]]
+module = [
+    "torch_geometric.*",
+    "torch_scatter.*",
+    "torch_sparse.*",
+    "confluent_kafka.*",
+    "neo4j.*",
+    "stable_baselines3.*",
+    "gymnasium.*",
+    "flwr.*",
+    "opacus.*",
+    "structlog.*",
+    "redis.*",
+]
+ignore_missing_imports = true
+
+# ============================================================
+# Pytest
+# ============================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-q",
+]
+markers = [
+    "unit: fast unit tests, no external dependencies",
+    "integration: tests requiring Docker services",
+    "gpu: tests requiring CUDA GPU",
+    "slow: tests that take more than 10 seconds",
+]
+
+# ============================================================
+# Coverage
+# ============================================================
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "tests/*",
+    "src/config/*",
+    "venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+]
+fail_under = 80

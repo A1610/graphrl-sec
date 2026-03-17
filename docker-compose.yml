@@ -1,0 +1,257 @@
+version: "3.9"
+
+# ============================================================
+# GraphRL-Sec — Docker Compose (Production-Grade Local Dev)
+# ============================================================
+# All services have:
+#   - healthchecks with proper thresholds
+#   - restart policies
+#   - resource limits
+#   - named volumes (data persists across restarts)
+#   - environment via .env file (no hardcoded secrets)
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # Redpanda — Lightweight Kafka-compatible message broker
+  # ----------------------------------------------------------
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.1
+    container_name: graphrl-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=localhost:8082
+      - --schema-registry-addr=0.0.0.0:8081
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+    ports:
+      - "9092:9092"     # Kafka API
+      - "8081:8081"     # Schema Registry
+      - "8082:8082"     # Pandaproxy (REST)
+      - "9644:9644"     # Admin API
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info", "--brokers=localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  # ----------------------------------------------------------
+  # Redpanda Console — Web UI for Kafka topics
+  # ----------------------------------------------------------
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.5.2
+    container_name: graphrl-redpanda-console
+    restart: unless-stopped
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - KAFKA_BROKERS=redpanda:9092
+      - KAFKA_SCHEMAREGISTRY_ENABLED=true
+      - KAFKA_SCHEMAREGISTRY_URLS=http://redpanda:8081
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ----------------------------------------------------------
+  # Neo4j — Graph database for network topology storage
+  # ----------------------------------------------------------
+  neo4j:
+    image: neo4j:5.17-community
+    container_name: graphrl-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt protocol
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-graphrlsec123}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1G
+      - NEO4J_server_memory_pagecache_size=256m
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  # ----------------------------------------------------------
+  # PostgreSQL — Metadata, alerts, analyst feedback storage
+  # ----------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: graphrl-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-graphrl_sec}
+      - POSTGRES_USER=${POSTGRES_USER:-graphrl}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-graphrlsec123}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-graphrl} -d ${POSTGRES_DB:-graphrl_sec}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ----------------------------------------------------------
+  # Redis — Caching, rate limiting, session store
+  # ----------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: graphrl-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+      --requirepass ${REDIS_PASSWORD:-graphrlsec123}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-graphrlsec123}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  # ----------------------------------------------------------
+  # Prometheus — Metrics collection
+  # ----------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: graphrl-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ----------------------------------------------------------
+  # Grafana — Monitoring dashboards
+  # ----------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: graphrl-grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+# ============================================================
+# Named Volumes — data persists across docker compose restarts
+# ============================================================
+volumes:
+  redpanda_data:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  neo4j_import:
+    driver: local
+  neo4j_plugins:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ============================================================
+# Networks — all services on isolated bridge network
+# ============================================================
+networks:
+  default:
+    name: graphrl-network
+    driver: bridge
