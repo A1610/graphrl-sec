@@ -316,6 +316,12 @@ class THetGATTrainer:
     def _run_epoch_train(self, epoch: int) -> float:
         """One training epoch — returns mean Focal loss."""
         self._model.train()
+        # Keep the pretrained encoder's BatchNorm1d layers in eval mode.
+        # Graph windows can contain as few as 1 node per type, and
+        # BatchNorm1d raises when batch_size=1 in training mode.
+        # Using running statistics (eval mode) is also more stable for
+        # fine-tuning since the pretrained running mean/var are reliable.
+        self._model.encoder.eval()
         total_loss = 0.0
         n_windows  = 0
 
