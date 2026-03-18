@@ -43,13 +43,14 @@ data/processed/
 data/graphs/
 
 # ----------------------------------------------------------
-# Model checkpoints (large binaries)
+# Model checkpoints and trained model binaries (large files)
 # ----------------------------------------------------------
 models/**/*.pt
 models/**/*.pth
 models/**/*.ckpt
 models/**/*.bin
 models/**/*.safetensors
+models/**/*.joblib
 
 # ----------------------------------------------------------
 # Jupyter
