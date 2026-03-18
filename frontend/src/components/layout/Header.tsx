@@ -59,19 +59,6 @@ export default function Header({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* About this page button */}
-          {infoContent != null && (
-            <button
-              type="button"
-              onClick={() => setInfoOpen(true)}
-              className="flex items-center gap-1.5 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-xs text-[#8b949e] transition-colors hover:border-[#58a6ff]/40 hover:text-[#58a6ff]"
-              aria-label={`About ${title} page`}
-            >
-              <Info size={12} aria-hidden="true" />
-              About
-            </button>
-          )}
-
           {/* Live status indicator */}
           <div
             className="flex items-center gap-2 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1"
@@ -82,6 +69,19 @@ export default function Header({
             <span className={statusDotClass} aria-hidden="true" />
             <span className="text-xs font-medium text-[#8b949e]">{statusLabel}</span>
           </div>
+
+          {/* Page info icon — small ℹ in the far top-right corner */}
+          {infoContent != null && (
+            <button
+              type="button"
+              onClick={() => setInfoOpen(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-[#30363d] bg-[#0d1117] text-[#8b949e] transition-colors hover:border-[#58a6ff]/60 hover:bg-[#58a6ff]/10 hover:text-[#58a6ff]"
+              aria-label={`About ${title}`}
+              title={`About ${title}`}
+            >
+              <Info size={13} aria-hidden="true" />
+            </button>
+          )}
         </div>
       </header>
 
