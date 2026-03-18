@@ -142,11 +142,37 @@ export default function DashboardPage(): React.ReactElement {
   const topCommunicator =
     communicators.length > 0 ? communicators[0].entity_key : "—";
 
+  // ---------------------------------------------------------------------------
+  // Info content — page-level and per-card explanations
+  // ---------------------------------------------------------------------------
+
+  const pageInfo = (
+    <div className="flex flex-col gap-3">
+      <p>
+        The <strong className="text-[#e6edf3]">Dashboard</strong> gives you a
+        real-time overview of the entire network knowledge graph built from
+        UNSW-NB15 and CICIDS2017 datasets.
+      </p>
+      <p>
+        All metrics auto-refresh every <strong className="text-[#e6edf3]">30 seconds</strong>.
+        The live status indicator in the top-right shows whether the backend
+        WebSocket stream is connected.
+      </p>
+      <ul className="list-disc pl-4 flex flex-col gap-1">
+        <li>KPI cards — headline counts at a glance</li>
+        <li>Donut chart — node type distribution</li>
+        <li>Bar chart — top 10 most active communicators</li>
+        <li>Recent alerts — latest anomalous connections</li>
+      </ul>
+    </div>
+  );
+
   return (
     <div className="flex flex-col overflow-auto">
       <Header
         title="Dashboard"
         subtitle="GraphRL-Sec Security Operations Centre"
+        infoContent={pageInfo}
       />
 
       <div className="flex flex-col gap-6 p-6">
@@ -171,6 +197,20 @@ export default function DashboardPage(): React.ReactElement {
                   subtitle="Hosts + IPs + Services + Domains + Users"
                   icon={<Layers size={18} />}
                   accentColor="#58a6ff"
+                  infoTitle="Total Nodes"
+                  infoContent={
+                    <div className="flex flex-col gap-2">
+                      <p>The total count of all entity nodes currently stored in the Neo4j knowledge graph.</p>
+                      <p>Node types included:</p>
+                      <ul className="list-disc pl-4 flex flex-col gap-1">
+                        <li><strong className="text-[#58a6ff]">Host</strong> — internal machines on the monitored network</li>
+                        <li><strong className="text-[#f85149]">ExternalIP</strong> — public IP addresses seen communicating with hosts</li>
+                        <li><strong className="text-[#3fb950]">Service</strong> — network ports/services (e.g. port 443, port 22)</li>
+                        <li><strong className="text-[#d29922]">Domain</strong> — DNS domain names resolved by hosts</li>
+                        <li><strong className="text-[#bc8cff]">User</strong> — user accounts seen in authentication events</li>
+                      </ul>
+                    </div>
+                  }
                 />
                 <KPICard
                   title="Total Edges"
@@ -178,6 +218,19 @@ export default function DashboardPage(): React.ReactElement {
                   subtitle="All relationship types"
                   icon={<Network size={18} />}
                   accentColor="#3fb950"
+                  infoTitle="Total Edges"
+                  infoContent={
+                    <div className="flex flex-col gap-2">
+                      <p>The total count of all relationship edges in the knowledge graph, representing interactions between entities.</p>
+                      <p>Edge types included:</p>
+                      <ul className="list-disc pl-4 flex flex-col gap-1">
+                        <li><strong className="text-[#e6edf3]">CONNECTS_TO</strong> — network flows between hosts and external IPs</li>
+                        <li><strong className="text-[#e6edf3]">USES_SERVICE</strong> — a host using a specific port/service</li>
+                        <li><strong className="text-[#e6edf3]">RESOLVES_DOMAIN</strong> — DNS resolution events</li>
+                        <li><strong className="text-[#e6edf3]">AUTHENTICATED_AS</strong> — login/auth events linking hosts to users</li>
+                      </ul>
+                    </div>
+                  }
                 />
                 <KPICard
                   title="Anomalous Connections"
@@ -185,6 +238,23 @@ export default function DashboardPage(): React.ReactElement {
                   subtitle="Attack score ≥ 0.5"
                   icon={<AlertTriangle size={18} />}
                   accentColor="#f85149"
+                  infoTitle="Anomalous Connections"
+                  infoContent={
+                    <div className="flex flex-col gap-2">
+                      <p>
+                        Count of network edges that the{" "}
+                        <strong className="text-[#e6edf3]">T-HetGAT model</strong> scored
+                        with an attack probability of{" "}
+                        <strong className="text-[#f85149]">≥ 0.5</strong> (50%).
+                      </p>
+                      <p>
+                        T-HetGAT is a Temporal Heterogeneous Graph Attention Network trained
+                        on labelled network flow windows. It assigns each edge an anomaly
+                        score in [0, 1] — higher means more likely to be an attack.
+                      </p>
+                      <p>A score ≥ 0.5 is the default detection threshold. Connections above this are surfaced as alerts.</p>
+                    </div>
+                  }
                 />
                 <KPICard
                   title="Top Communicator"
@@ -196,6 +266,21 @@ export default function DashboardPage(): React.ReactElement {
                   }
                   icon={<Zap size={18} />}
                   accentColor="#d29922"
+                  infoTitle="Top Communicator"
+                  infoContent={
+                    <div className="flex flex-col gap-2">
+                      <p>
+                        The entity (host, IP, or service) with the{" "}
+                        <strong className="text-[#e6edf3]">highest number of outbound connections</strong>{" "}
+                        in the current graph.
+                      </p>
+                      <p>
+                        High outbound connection counts can indicate port scanning, lateral movement,
+                        data exfiltration, or a C2 beaconing host.
+                      </p>
+                      <p>See the Analytics page for the full top-20 communicators ranking.</p>
+                    </div>
+                  }
                 />
               </>
             )}

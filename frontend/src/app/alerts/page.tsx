@@ -237,7 +237,34 @@ export default function AlertsPage(): React.ReactElement {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Header title="Alerts" subtitle="Security alerts derived from anomalous graph paths" />
+      <Header
+        title="Alerts"
+        subtitle="Security alerts derived from anomalous graph paths"
+        infoContent={
+          <div className="flex flex-col gap-3">
+            <p>
+              This page lists all network connections that the{" "}
+              <strong className="text-[#e6edf3]">T-HetGAT model</strong> has
+              flagged as anomalous, sorted by attack probability score.
+            </p>
+            <p>
+              <strong className="text-[#e6edf3]">Severity</strong> is derived from the
+              model&apos;s attack score:
+            </p>
+            <ul className="list-disc pl-4 flex flex-col gap-1">
+              <li><strong className="text-[#f85149]">Critical</strong> — score ≥ 0.90</li>
+              <li><strong className="text-[#d29922]">High</strong> — score ≥ 0.75</li>
+              <li><strong className="text-[#3fb950]">Medium</strong> — score ≥ 0.50</li>
+              <li><strong className="text-[#58a6ff]">Low</strong> — score ≥ 0.25</li>
+            </ul>
+            <p>
+              Click any row to open the detail panel, which shows the alert
+              properties and its{" "}
+              <strong className="text-[#e6edf3]">2-hop neighborhood</strong> in the graph.
+            </p>
+          </div>
+        }
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main panel */}

@@ -106,6 +106,32 @@ export default function AnalyticsPage(): React.ReactElement {
       <Header
         title="Analytics"
         subtitle="Graph statistics and top talker analysis"
+        infoContent={
+          <div className="flex flex-col gap-3">
+            <p>
+              The <strong className="text-[#e6edf3]">Analytics</strong> page provides
+              a detailed breakdown of the knowledge graph&apos;s structure and
+              identifies the most active network entities.
+            </p>
+            <p>Sections on this page:</p>
+            <ul className="list-disc pl-4 flex flex-col gap-1">
+              <li>
+                <strong className="text-[#e6edf3]">Graph Statistics</strong> — exact
+                node and edge counts by type, sourced from Neo4j
+              </li>
+              <li>
+                <strong className="text-[#e6edf3]">Top 20 Communicators</strong> — entities
+                ranked by outbound connection count; high counts may indicate scanning
+                or exfiltration
+              </li>
+              <li>
+                <strong className="text-[#e6edf3]">System Information</strong> — dataset
+                sources, graph backend, and ML pipeline details
+              </li>
+            </ul>
+            <p>Data refreshes every 30 seconds from the live Neo4j instance.</p>
+          </div>
+        }
       />
 
       <div className="flex flex-col gap-6 p-6">

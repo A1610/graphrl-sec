@@ -3,21 +3,35 @@
 /**
  * Header — top bar showing page title, live connection status indicator,
  * and the last-updated timestamp from the WebSocket stream.
+ *
+ * Pass `infoContent` + `infoTitle` to render an "About this page" button
+ * that opens an info modal describing what the page shows.
  */
+
+import { useState } from "react";
+import { Info } from "lucide-react";
 
 import { useGraphStream } from "@/hooks/useGraphStream";
 import { cn } from "@/lib/utils";
+import InfoModal from "@/components/ui/InfoModal";
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
+  /** When provided, renders an "About" button that opens an info modal. */
+  infoContent?: React.ReactNode;
+  /** Title shown in the info modal. Defaults to "About {title}". */
+  infoTitle?: string;
 }
 
 export default function Header({
   title,
   subtitle,
+  infoContent,
+  infoTitle,
 }: HeaderProps): React.ReactElement {
   const { connected, error } = useGraphStream();
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const statusLabel = error != null
     ? "Error"
@@ -35,24 +49,52 @@ export default function Header({
   );
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-[#30363d] bg-[#161b22] px-6">
-      <div className="flex flex-col justify-center">
-        <h1 className="text-sm font-semibold text-[#e6edf3]">{title}</h1>
-        {subtitle != null && (
-          <p className="text-xs text-[#8b949e]">{subtitle}</p>
-        )}
-      </div>
+    <>
+      <header className="flex h-14 items-center justify-between border-b border-[#30363d] bg-[#161b22] px-6">
+        <div className="flex flex-col justify-center">
+          <h1 className="text-sm font-semibold text-[#e6edf3]">{title}</h1>
+          {subtitle != null && (
+            <p className="text-xs text-[#8b949e]">{subtitle}</p>
+          )}
+        </div>
 
-      {/* Live status indicator */}
-      <div
-        className="flex items-center gap-2 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1"
-        role="status"
-        aria-label={`Neo4j connection: ${statusLabel}`}
-        aria-live="polite"
-      >
-        <span className={statusDotClass} aria-hidden="true" />
-        <span className="text-xs font-medium text-[#8b949e]">{statusLabel}</span>
-      </div>
-    </header>
+        <div className="flex items-center gap-3">
+          {/* About this page button */}
+          {infoContent != null && (
+            <button
+              type="button"
+              onClick={() => setInfoOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-xs text-[#8b949e] transition-colors hover:border-[#58a6ff]/40 hover:text-[#58a6ff]"
+              aria-label={`About ${title} page`}
+            >
+              <Info size={12} aria-hidden="true" />
+              About
+            </button>
+          )}
+
+          {/* Live status indicator */}
+          <div
+            className="flex items-center gap-2 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1"
+            role="status"
+            aria-label={`Neo4j connection: ${statusLabel}`}
+            aria-live="polite"
+          >
+            <span className={statusDotClass} aria-hidden="true" />
+            <span className="text-xs font-medium text-[#8b949e]">{statusLabel}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Page info modal */}
+      {infoContent != null && (
+        <InfoModal
+          open={infoOpen}
+          onClose={() => setInfoOpen(false)}
+          title={infoTitle ?? `About ${title}`}
+        >
+          {infoContent}
+        </InfoModal>
+      )}
+    </>
   );
 }

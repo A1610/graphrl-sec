@@ -433,6 +433,27 @@ export default function GraphPage(): React.ReactElement {
       <Header
         title="Graph Explorer"
         subtitle="Interactive network topology visualization"
+        infoContent={
+          <div className="flex flex-col gap-3">
+            <p>
+              The <strong className="text-[#e6edf3]">Graph Explorer</strong> renders
+              the network knowledge graph as an interactive force-directed diagram
+              using vis-network.
+            </p>
+            <p>
+              On load, it shows the top{" "}
+              <strong className="text-[#e6edf3]">300 anomalous edges</strong> (attack
+              score ≥ 0.3) detected by the T-HetGAT model.
+            </p>
+            <ul className="list-disc pl-4 flex flex-col gap-1">
+              <li><strong className="text-[#e6edf3]">Click a node</strong> — loads its 2-hop neighborhood and shows properties in the right panel</li>
+              <li><strong className="text-[#e6edf3]">Search by IP</strong> — type an IP address and press Enter to focus on that entity</li>
+              <li><strong className="text-[#e6edf3]">Scroll</strong> — zoom in/out</li>
+              <li><strong className="text-[#e6edf3]">Drag</strong> — pan the canvas or reposition nodes</li>
+            </ul>
+            <p>Node size scales with connection count. Colors indicate node type (see legend at bottom-left).</p>
+          </div>
+        }
       />
 
       {/* Error banner */}
