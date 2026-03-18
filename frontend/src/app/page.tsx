@@ -197,7 +197,6 @@ export default function DashboardPage(): React.ReactElement {
                   subtitle="Hosts + IPs + Services + Domains + Users"
                   icon={<Layers size={18} />}
                   accentColor="#58a6ff"
-                  infoTitle="Total Nodes"
                   infoContent={
                     <div className="flex flex-col gap-2">
                       <p>The total count of all entity nodes currently stored in the Neo4j knowledge graph.</p>
@@ -218,7 +217,6 @@ export default function DashboardPage(): React.ReactElement {
                   subtitle="All relationship types"
                   icon={<Network size={18} />}
                   accentColor="#3fb950"
-                  infoTitle="Total Edges"
                   infoContent={
                     <div className="flex flex-col gap-2">
                       <p>The total count of all relationship edges in the knowledge graph, representing interactions between entities.</p>
@@ -238,7 +236,6 @@ export default function DashboardPage(): React.ReactElement {
                   subtitle="Attack score ≥ 0.5"
                   icon={<AlertTriangle size={18} />}
                   accentColor="#f85149"
-                  infoTitle="Anomalous Connections"
                   infoContent={
                     <div className="flex flex-col gap-2">
                       <p>
@@ -266,7 +263,6 @@ export default function DashboardPage(): React.ReactElement {
                   }
                   icon={<Zap size={18} />}
                   accentColor="#d29922"
-                  infoTitle="Top Communicator"
                   infoContent={
                     <div className="flex flex-col gap-2">
                       <p>
