@@ -51,26 +51,15 @@ export default function Header({
   return (
     <>
       <header className="flex h-14 items-center justify-between border-b border-[#30363d] bg-[#161b22] px-6">
-        <div className="flex flex-col justify-center">
-          <h1 className="text-sm font-semibold text-[#e6edf3]">{title}</h1>
-          {subtitle != null && (
-            <p className="text-xs text-[#8b949e]">{subtitle}</p>
-          )}
-        </div>
-
+        {/* Left: title + subtitle + Page Info button */}
         <div className="flex items-center gap-3">
-          {/* Live status indicator */}
-          <div
-            className="flex items-center gap-2 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1"
-            role="status"
-            aria-label={`Neo4j connection: ${statusLabel}`}
-            aria-live="polite"
-          >
-            <span className={statusDotClass} aria-hidden="true" />
-            <span className="text-xs font-medium text-[#8b949e]">{statusLabel}</span>
+          <div className="flex flex-col justify-center">
+            <h1 className="text-sm font-semibold text-[#e6edf3]">{title}</h1>
+            {subtitle != null && (
+              <p className="text-xs text-[#8b949e]">{subtitle}</p>
+            )}
           </div>
 
-          {/* Page Info button — top-right corner */}
           {infoContent != null && (
             <button
               type="button"
@@ -82,6 +71,17 @@ export default function Header({
               <span className="text-[10px] font-medium tracking-wide">Page Info</span>
             </button>
           )}
+        </div>
+
+        {/* Right: Live status indicator */}
+        <div
+          className="flex items-center gap-2 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1"
+          role="status"
+          aria-label={`Neo4j connection: ${statusLabel}`}
+          aria-live="polite"
+        >
+          <span className={statusDotClass} aria-hidden="true" />
+          <span className="text-xs font-medium text-[#8b949e]">{statusLabel}</span>
         </div>
       </header>
 
