@@ -434,24 +434,83 @@ export default function GraphPage(): React.ReactElement {
         title="Graph Explorer"
         subtitle="Interactive network topology visualization"
         infoContent={
-          <div className="flex flex-col gap-3">
-            <p>
-              The <strong className="text-[#e6edf3]">Graph Explorer</strong> renders
-              the network knowledge graph as an interactive force-directed diagram
-              using vis-network.
-            </p>
-            <p>
-              On load, it shows the top{" "}
-              <strong className="text-[#e6edf3]">300 anomalous edges</strong> (attack
-              score ≥ 0.3) detected by the T-HetGAT model.
-            </p>
-            <ul className="list-disc pl-4 flex flex-col gap-1">
-              <li><strong className="text-[#e6edf3]">Click a node</strong> — loads its 2-hop neighborhood and shows properties in the right panel</li>
-              <li><strong className="text-[#e6edf3]">Search by IP</strong> — type an IP address and press Enter to focus on that entity</li>
-              <li><strong className="text-[#e6edf3]">Scroll</strong> — zoom in/out</li>
-              <li><strong className="text-[#e6edf3]">Drag</strong> — pan the canvas or reposition nodes</li>
-            </ul>
-            <p>Node size scales with connection count. Colors indicate node type (see legend at bottom-left).</p>
+          <div className="flex flex-col gap-5">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">What is this page?</p>
+              <p>
+                The <strong className="text-[#e6edf3]">Graph Explorer</strong> is an interactive,
+                force-directed visualisation of the network knowledge graph built from UNSW-NB15 and
+                CICIDS2017 packet captures. It lets you visually trace attack paths, identify clusters
+                of suspicious activity, and explore the neighbourhood of any entity in the graph.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">What is shown on load</p>
+              <p>
+                On initial load the page fetches the top{" "}
+                <strong className="text-[#e6edf3]">300 anomalous edges</strong> — connections that the
+                T-HetGAT model scored with an attack probability of{" "}
+                <strong className="text-[#e6edf3]">≥ 0.3</strong>. A lower threshold (0.3 vs 0.5 on the
+                dashboard) is used here to show a richer picture of potentially suspicious activity, not
+                just confirmed high-confidence alerts.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Node types &amp; colours</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { label: "Host",       color: "#58a6ff", desc: "Internal LAN machine" },
+                  { label: "ExternalIP", color: "#f85149", desc: "Public internet IP" },
+                  { label: "Service",    color: "#3fb950", desc: "Network port / service" },
+                  { label: "Domain",     color: "#d29922", desc: "DNS domain name" },
+                  { label: "User",       color: "#bc8cff", desc: "User account" },
+                ].map((t) => (
+                  <div key={t.label} className="flex items-center gap-2 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1.5">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                    <div>
+                      <p className="text-[11px] font-semibold" style={{ color: t.color }}>{t.label}</p>
+                      <p className="text-[10px] text-[#8b949e]">{t.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px]">
+                <strong className="text-[#e6edf3]">Node size</strong> scales with the connection count —
+                larger nodes have more traffic, making high-activity entities immediately visible.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">How to navigate</p>
+              <div className="flex flex-col gap-2">
+                {[
+                  { title: "Click a node",       desc: "Loads its 2-hop neighbourhood from Neo4j (all nodes reachable within 2 relationship hops) and overlays them on the current graph. Properties appear in the right panel." },
+                  { title: "Search by IP",        desc: "Type any IP address in the left panel and press Enter or click the search button. The graph centres on that entity and loads its neighbourhood." },
+                  { title: "Scroll wheel",        desc: "Zoom in and out on the canvas." },
+                  { title: "Drag canvas",         desc: "Pan the view by dragging empty space. Drag individual nodes to reposition them in the layout." },
+                  { title: "Legend (bottom-left)", desc: "Colour key for node types. Always visible as an overlay on the graph canvas." },
+                  { title: "Clear selection",     desc: "Click the × in the selected-node summary panel (left) to reset the view back to the base anomalous-edge graph." },
+                ].map((f) => (
+                  <div key={f.title} className="rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2.5">
+                    <p className="mb-0.5 text-xs font-semibold text-[#e6edf3]">{f.title}</p>
+                    <p className="text-[11px] text-[#8b949e]">{f.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">How to read attack patterns</p>
+              <p>
+                Look for <strong className="text-[#f85149]">ExternalIP nodes</strong> (red) with many
+                edges connecting them to internal <strong className="text-[#58a6ff]">Hosts</strong> (blue)
+                — this pattern is typical of inbound scanning, brute-force, or DDoS. Conversely, a Host
+                with many outbound edges to external IPs could indicate exfiltration or a compromised
+                machine acting as a bot. Use the right panel&apos;s neighbourhood count to gauge blast radius.
+              </p>
+            </div>
           </div>
         }
       />

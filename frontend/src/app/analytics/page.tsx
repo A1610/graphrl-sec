@@ -107,29 +107,87 @@ export default function AnalyticsPage(): React.ReactElement {
         title="Analytics"
         subtitle="Graph statistics and top talker analysis"
         infoContent={
-          <div className="flex flex-col gap-3">
-            <p>
-              The <strong className="text-[#e6edf3]">Analytics</strong> page provides
-              a detailed breakdown of the knowledge graph&apos;s structure and
-              identifies the most active network entities.
-            </p>
-            <p>Sections on this page:</p>
-            <ul className="list-disc pl-4 flex flex-col gap-1">
-              <li>
-                <strong className="text-[#e6edf3]">Graph Statistics</strong> — exact
-                node and edge counts by type, sourced from Neo4j
-              </li>
-              <li>
-                <strong className="text-[#e6edf3]">Top 20 Communicators</strong> — entities
-                ranked by outbound connection count; high counts may indicate scanning
-                or exfiltration
-              </li>
-              <li>
-                <strong className="text-[#e6edf3]">System Information</strong> — dataset
-                sources, graph backend, and ML pipeline details
-              </li>
-            </ul>
-            <p>Data refreshes every 30 seconds from the live Neo4j instance.</p>
+          <div className="flex flex-col gap-5">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">What is this page?</p>
+              <p>
+                The <strong className="text-[#e6edf3]">Analytics</strong> page is the deep-statistics
+                view of the knowledge graph. Where the Dashboard gives quick headline numbers, Analytics
+                gives you the full breakdown — exact counts by type, a ranked communicator table, and
+                technical metadata about the underlying system. It is most useful for understanding the
+                overall shape of the dataset and identifying outlier entities.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Graph statistics section</p>
+              <p>
+                Two tables pulled live from Neo4j — one for nodes (by type) and one for edges (by
+                relationship type). The <strong className="text-[#e6edf3]">Total</strong> row at the
+                bottom of each table is the same number shown in the Dashboard KPI cards. Counts
+                refresh every 30 seconds.
+              </p>
+              <div className="mt-2 flex flex-col gap-1.5">
+                {[
+                  { label: "Node counts",  desc: "How many Host, ExternalIP, Service, Domain, and User entities are stored in the graph. Node count grows as more unique IPs/domains/users appear in the raw flows." },
+                  { label: "Edge counts",  desc: "How many relationships of each type exist. CONNECTS_TO will always be the largest — it captures every raw network flow." },
+                ].map((r) => (
+                  <div key={r.label} className="rounded border border-[#30363d] bg-[#0d1117] px-3 py-2">
+                    <p className="mb-0.5 text-xs font-semibold text-[#e6edf3]">{r.label}</p>
+                    <p className="text-[11px] text-[#8b949e]">{r.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Top 20 communicators table</p>
+              <p>
+                Entities ranked by <strong className="text-[#e6edf3]">outbound connection count</strong> —
+                the number of CONNECTS_TO edges originating from that entity. Two columns matter most:
+              </p>
+              <div className="mt-2 flex flex-col gap-1.5">
+                {[
+                  { label: "Outbound",      desc: "Total connections initiated by this entity. A very high number relative to peers is a red flag — normal workstations send far fewer connections than servers or scanners." },
+                  { label: "Destinations",  desc: "Number of unique IPs/entities this entity contacted. A high unique-destination count (fan-out) is the hallmark of port scanning and reconnaissance." },
+                ].map((c) => (
+                  <div key={c.label} className="rounded border border-[#30363d] bg-[#0d1117] px-3 py-2">
+                    <p className="mb-0.5 text-xs font-semibold text-[#e6edf3]">{c.label}</p>
+                    <p className="text-[11px] text-[#8b949e]">{c.desc}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px]">
+                If a Host (blue) appears near the top of this list with both high outbound count AND high
+                unique destinations, treat it as a priority investigation target.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">System information section</p>
+              <div className="flex flex-col gap-1.5">
+                {[
+                  { label: "Dataset Sources",  desc: "UNSW-NB15 (~2 GB, Canberra 2015) + CICIDS2017 (~7 GB, UNB Canada 2017). Both contain labelled attack traffic across 9+ attack categories including DoS, DDoS, Brute Force, Infiltration, and Botnet." },
+                  { label: "Graph Backend",    desc: "Neo4j graph database accessed via the Bolt protocol. The FastAPI backend queries Neo4j with Cypher and exposes REST endpoints consumed by this frontend." },
+                  { label: "ML Pipeline",      desc: "GNN pretraining (HeteroGraphEncoder with GraphSAGE, contrastive loss) → T-HetGAT fine-tuning (temporal attention, FocalLoss) → inference via FastAPI → alerts stored in Neo4j." },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2.5">
+                    <p className="mb-0.5 text-xs font-semibold text-[#e6edf3]">{s.label}</p>
+                    <p className="text-[11px] text-[#8b949e]">{s.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Refresh behaviour</p>
+              <p>
+                Both the stats and communicators queries use a{" "}
+                <strong className="text-[#e6edf3]">30-second stale time</strong> with automatic
+                background refetch. The system information section is static — it reflects the
+                architecture of the current deployment and does not change at runtime.
+              </p>
+            </div>
           </div>
         }
       />

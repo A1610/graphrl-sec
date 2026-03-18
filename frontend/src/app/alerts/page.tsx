@@ -241,27 +241,77 @@ export default function AlertsPage(): React.ReactElement {
         title="Alerts"
         subtitle="Security alerts derived from anomalous graph paths"
         infoContent={
-          <div className="flex flex-col gap-3">
-            <p>
-              This page lists all network connections that the{" "}
-              <strong className="text-[#e6edf3]">T-HetGAT model</strong> has
-              flagged as anomalous, sorted by attack probability score.
-            </p>
-            <p>
-              <strong className="text-[#e6edf3]">Severity</strong> is derived from the
-              model&apos;s attack score:
-            </p>
-            <ul className="list-disc pl-4 flex flex-col gap-1">
-              <li><strong className="text-[#f85149]">Critical</strong> — score ≥ 0.90</li>
-              <li><strong className="text-[#d29922]">High</strong> — score ≥ 0.75</li>
-              <li><strong className="text-[#3fb950]">Medium</strong> — score ≥ 0.50</li>
-              <li><strong className="text-[#58a6ff]">Low</strong> — score ≥ 0.25</li>
-            </ul>
-            <p>
-              Click any row to open the detail panel, which shows the alert
-              properties and its{" "}
-              <strong className="text-[#e6edf3]">2-hop neighborhood</strong> in the graph.
-            </p>
+          <div className="flex flex-col gap-5">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">What is this page?</p>
+              <p>
+                The <strong className="text-[#e6edf3]">Alerts</strong> page is the full incident log —
+                every network connection that the T-HetGAT model has scored as anomalous, paginated and
+                filterable. Think of it as the &ldquo;threat inbox&rdquo; for the SOC analyst.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">How alerts are generated</p>
+              <p>
+                The <strong className="text-[#e6edf3]">T-HetGAT model</strong> (Temporal Heterogeneous
+                Graph Attention Network) reads 60-second network flow windows as heterogeneous graphs.
+                For each window it assigns every edge — every connection between two network entities —
+                an <strong className="text-[#e6edf3]">attack probability in [0, 1]</strong>.
+              </p>
+              <p className="mt-2">
+                Connections that score above the detection threshold are written to the database as alerts.
+                The model achieves <strong className="text-[#e6edf3]">AUROC &gt; 0.98</strong> on the
+                held-out test set, outperforming the Node2Vec + Isolation Forest baseline.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Severity bands</p>
+              <div className="flex flex-col gap-1.5">
+                {[
+                  { label: "Critical", range: "score ≥ 0.90", color: "#f85149", desc: "Near-certain attack. Immediate investigation required." },
+                  { label: "High",     range: "score ≥ 0.75", color: "#d29922", desc: "Strong indicator of malicious activity. Triage promptly." },
+                  { label: "Medium",   range: "score ≥ 0.50", color: "#3fb950", desc: "Above detection threshold. Worth reviewing in bulk." },
+                  { label: "Low",      range: "score ≥ 0.25", color: "#58a6ff", desc: "Marginal score. Could be noisy — review in context." },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2">
+                    <div className="mb-0.5 flex items-center justify-between">
+                      <span className="text-xs font-semibold" style={{ color: s.color }}>{s.label}</span>
+                      <span className="font-mono text-[10px] text-[#8b949e]">{s.range}</span>
+                    </div>
+                    <p className="text-[11px] text-[#8b949e]">{s.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Page features</p>
+              <div className="flex flex-col gap-2">
+                {[
+                  { title: "Severity filter",   desc: "Filter to All / Critical / High / Medium / Low using the pill buttons. Resets pagination to page 1 automatically." },
+                  { title: "Pagination",        desc: "50 alerts per page. Use Previous / Next to navigate. The total count updates based on the active filter." },
+                  { title: "Alert table",       desc: "Columns: Source IP → Dest IP, Protocol, Attack Score, Severity badge, Label (attack type from ground truth). Click a row to open the detail panel." },
+                  { title: "Detail panel",      desc: "Slide-out right panel showing all alert fields (ID, IPs, packets, bytes, window ID) plus the 2-hop neighborhood — the immediate graph context around that connection." },
+                ].map((f) => (
+                  <div key={f.title} className="rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2.5">
+                    <p className="mb-0.5 text-xs font-semibold text-[#e6edf3]">{f.title}</p>
+                    <p className="text-[11px] text-[#8b949e]">{f.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">What to look for</p>
+              <p>
+                Focus on <strong className="text-[#f85149]">Critical</strong> alerts first — especially
+                those involving internal hosts (10.x.x.x, 192.168.x.x) communicating with external IPs on
+                unusual ports. Repeated alerts from the same source IP across multiple windows suggest a
+                sustained attack rather than a one-off anomaly.
+              </p>
+            </div>
           </div>
         }
       />

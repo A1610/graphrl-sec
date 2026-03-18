@@ -45,7 +45,7 @@ export default function InfoModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-md rounded-lg border border-[#30363d] bg-[#161b22] shadow-2xl">
+      <div className="relative w-full max-w-2xl rounded-lg border border-[#30363d] bg-[#161b22] shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#30363d] px-5 py-4">
           <h2 className="text-sm font-semibold text-[#e6edf3]">{title}</h2>
@@ -60,7 +60,7 @@ export default function InfoModal({
         </div>
 
         {/* Content */}
-        <div className="px-5 py-4 text-sm leading-relaxed text-[#8b949e]">
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-4 text-sm leading-relaxed text-[#8b949e]">
           {children}
         </div>
       </div>

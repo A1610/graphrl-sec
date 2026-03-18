@@ -70,16 +70,16 @@ export default function Header({
             <span className="text-xs font-medium text-[#8b949e]">{statusLabel}</span>
           </div>
 
-          {/* Page info icon — small ℹ in the far top-right corner */}
+          {/* Page Info button — top-right corner */}
           {infoContent != null && (
             <button
               type="button"
               onClick={() => setInfoOpen(true)}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-[#30363d] bg-[#0d1117] text-[#8b949e] transition-colors hover:border-[#58a6ff]/60 hover:bg-[#58a6ff]/10 hover:text-[#58a6ff]"
-              aria-label={`About ${title}`}
-              title={`About ${title}`}
+              className="flex items-center gap-1.5 rounded-full border border-[#30363d] bg-[#0d1117] px-2.5 py-1 text-[#8b949e] transition-colors hover:border-[#58a6ff]/60 hover:bg-[#58a6ff]/10 hover:text-[#58a6ff]"
+              aria-label={`Page info: ${title}`}
             >
-              <Info size={13} aria-hidden="true" />
+              <Info size={11} aria-hidden="true" />
+              <span className="text-[10px] font-medium tracking-wide">Page Info</span>
             </button>
           )}
         </div>

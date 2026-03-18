@@ -487,16 +487,68 @@ export default function DashboardPage(): React.ReactElement {
   const openDrawer = (def: DrawerDef) => setDrawerDef(def);
   const closeDrawer = () => setDrawerDef(null);
 
-  // ── Page-level info (header About button) ────────────────────────────────
+  // ── Page-level info (header Page Info button) ────────────────────────────
   const pageInfo = (
-    <div className="flex flex-col gap-3">
-      <p>
-        Real-time SOC overview of the network knowledge graph built from UNSW-NB15
-        and CICIDS2017 datasets. All metrics refresh every 30 seconds.
-      </p>
-      <p className="text-[11px]">
-        Click any card or section to learn what it shows and how to interpret it.
-      </p>
+    <div className="flex flex-col gap-5">
+      <div>
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">What is this page?</p>
+        <p>
+          The <strong className="text-[#e6edf3]">Dashboard</strong> is the central command view of the
+          GraphRL-Sec Security Operations Centre. It gives you a live, high-level picture of the entire
+          network knowledge graph — how many entities exist, which connections are suspicious, and where
+          attack activity is concentrated.
+        </p>
+      </div>
+
+      <div>
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Data sources</p>
+        <p>
+          All data originates from two public cybersecurity datasets —{" "}
+          <strong className="text-[#e6edf3]">UNSW-NB15</strong> (~2 GB) and{" "}
+          <strong className="text-[#e6edf3]">CICIDS2017</strong> (~7 GB) — containing real network packet
+          captures with ground-truth attack labels. Raw flows are feature-engineered and loaded into a
+          Neo4j graph database as a heterogeneous knowledge graph (5 node types, 4 edge types).
+        </p>
+      </div>
+
+      <div>
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">How anomalies are detected</p>
+        <p>
+          A <strong className="text-[#e6edf3]">T-HetGAT model</strong> (Temporal Heterogeneous Graph
+          Attention Network) is trained on 17,657 labelled graph windows. For each 60-second time window,
+          it reads the network graph and assigns every edge an{" "}
+          <strong className="text-[#e6edf3]">attack probability score in [0, 1]</strong>. Edges scoring
+          ≥ 0.5 are flagged as anomalous and surface as alerts.
+        </p>
+      </div>
+
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Sections on this page</p>
+        <div className="flex flex-col gap-2">
+          {[
+            { title: "KPI Cards",              desc: "4 headline metrics: total nodes, total edges, anomalous connection count, and the most active communicator. Auto-refresh every 30 s. Click any card for a detailed explanation." },
+            { title: "Node Type Donut",        desc: "Proportion of each entity type (Host, ExternalIP, Service, Domain, User) in the full graph. A surge in ExternalIP nodes relative to Hosts can indicate a scanning campaign." },
+            { title: "Top 10 Communicators",   desc: "Bar chart of the 10 entities with the highest outbound connection count. Unusually active hosts may be compromised, scanning, or exfiltrating data." },
+            { title: "Graph Statistics Breakdown", desc: "Flat grid of all node and edge type counts — same numbers as the KPI cards but together in one glanceable view." },
+            { title: "Node Types / Edge Types", desc: "Detailed lists showing counts per entity type and relationship type. Useful for understanding the shape of the current graph snapshot." },
+            { title: "Recent Alerts",          desc: "The 20 most recently flagged anomalous connections. Click 'View all →' to go to the full Alerts page with filter, sort, and detail panel." },
+          ].map((s) => (
+            <div key={s.title} className="rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2.5">
+              <p className="mb-0.5 text-xs font-semibold text-[#e6edf3]">{s.title}</p>
+              <p className="text-[11px] text-[#8b949e]">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#58a6ff]">Refresh behaviour</p>
+        <p>
+          All queries use a <strong className="text-[#e6edf3]">30-second stale time and refetch interval</strong>.
+          The live status indicator (top-right of the header) shows whether the WebSocket stream to Neo4j
+          is active. If it shows &ldquo;Error&rdquo;, the backend API server is likely not running.
+        </p>
+      </div>
     </div>
   );
 
