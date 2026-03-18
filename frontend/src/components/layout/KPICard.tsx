@@ -6,12 +6,11 @@
  * Accepts an optional trend indicator (+/- delta) and a loading state
  * that renders a skeleton placeholder instead of data.
  *
- * Pass `infoContent` + `infoTitle` to show an ℹ button that opens an
- * info modal explaining what this metric means.
+ * Pass `infoContent` + `infoTitle` to make the entire card clickable —
+ * clicking anywhere on the card opens an info modal explaining the metric.
  */
 
 import { useState } from "react";
-import { Info } from "lucide-react";
 
 import { cn, formatNumber } from "@/lib/utils";
 import InfoModal from "@/components/ui/InfoModal";
@@ -26,7 +25,7 @@ interface KPICardProps {
   /** Optional delta string, e.g. "+12%" or "-3 nodes" */
   delta?: string;
   deltaPositive?: boolean;
-  /** When provided, renders an ℹ button that opens an info modal. */
+  /** When provided, clicking the card opens an info modal. */
   infoContent?: React.ReactNode;
   /** Title shown in the info modal header. Defaults to the card title. */
   infoTitle?: string;
@@ -61,39 +60,33 @@ export default function KPICard({
   const displayValue =
     typeof value === "number" ? formatNumber(value) : (value ?? "—");
 
+  const isClickable = infoContent != null;
+
   return (
     <>
       <article
-        className="flex flex-col gap-3 rounded-lg border border-[#30363d] bg-[#161b22] p-5"
-        aria-label={`KPI: ${title}`}
+        className={cn(
+          "flex flex-col gap-3 rounded-lg border border-[#30363d] bg-[#161b22] p-5",
+          isClickable && "cursor-pointer transition-colors hover:border-[#58a6ff]/40 hover:bg-[#161b22]/80",
+        )}
+        aria-label={`KPI: ${title}${isClickable ? " — click for details" : ""}`}
+        onClick={isClickable ? () => setInfoOpen(true) : undefined}
+        role={isClickable ? "button" : undefined}
+        tabIndex={isClickable ? 0 : undefined}
+        onKeyDown={isClickable ? (e) => { if (e.key === "Enter" || e.key === " ") setInfoOpen(true); } : undefined}
       >
         {/* Header row */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
             {title}
           </span>
-
-          <div className="flex items-center gap-1.5">
-            {/* Info button — only rendered when infoContent is provided */}
-            {infoContent != null && (
-              <button
-                type="button"
-                onClick={() => setInfoOpen(true)}
-                className="rounded p-1 text-[#8b949e] transition-colors hover:bg-[#30363d] hover:text-[#58a6ff]"
-                aria-label={`About ${title}`}
-              >
-                <Info size={13} aria-hidden="true" />
-              </button>
-            )}
-
-            <span
-              className="rounded-md p-1.5"
-              style={{ color: accentColor, backgroundColor: `${accentColor}18` }}
-              aria-hidden="true"
-            >
-              {icon}
-            </span>
-          </div>
+          <span
+            className="rounded-md p-1.5"
+            style={{ color: accentColor, backgroundColor: `${accentColor}18` }}
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
         </div>
 
         {/* Value */}
@@ -132,7 +125,7 @@ export default function KPICard({
         </div>
       </article>
 
-      {/* Info modal */}
+      {/* Info modal — opens when card is clicked */}
       {infoContent != null && (
         <InfoModal
           open={infoOpen}
