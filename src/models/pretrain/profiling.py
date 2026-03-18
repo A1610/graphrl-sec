@@ -53,7 +53,18 @@ _PROFILE_NAMES: list[str] = [
     "srcip", "sport", "dstip", "dsport",
     "proto", "sbytes", "dbytes", "label",
 ]
-_UNSW_RAW_GLOB = "UNSW-NB15_[0-9].csv"
+_UNSW_RAW_GLOB   = "UNSW-NB15_[0-9].csv"
+_CICIDS_RAW_GLOB = "*.csv"
+
+# CICIDS2017 column names (note leading spaces — CICFlowMeter quirk)
+_CICIDS_COL_MAP = {
+    " Source IP":      "srcip",
+    " Source Port":    "sport",
+    " Destination IP": "dstip",
+    " Destination Port": "dsport",
+    " Protocol":       "proto",
+    " Label":          "label",
+}
 
 # Feature names (matches column order in ProfileResult.features)
 FLOW_FEATURE_NAMES: list[str] = [
@@ -163,22 +174,25 @@ class BehaviorProfiler:
             Output of :meth:`~src.models.pretrain.node2vec.Node2VecEmbedder.fit`.
             Provides the Node2Vec embeddings and the IP→index mapping.
         csv_paths:
-            Raw UNSW CSV paths for flow statistics.  When ``None``,
-            auto-discovers ``UNSW-NB15_[0-9].csv`` under ``config.raw_unsw_dir``.
+            Explicit UNSW raw CSV paths.  When ``None``, auto-discovers
+            both ``UNSW-NB15_[0-9].csv`` and CICIDS2017 ``*.csv`` files
+            from the configured data directories.
 
         Returns
         -------
         ProfileResult
         """
-        resolved = self._resolve_csv_paths(csv_paths)
+        unsw_paths   = self._resolve_unsw_paths(csv_paths)
+        cicids_paths = self._resolve_cicids_paths()
         logger.info(
             "profiler_start",
             num_ips=embedding_result.num_nodes,
-            csv_count=len(resolved),
+            unsw_csv_count=len(unsw_paths),
+            cicids_csv_count=len(cicids_paths),
         )
 
         # ── Step 1: Load flow data for statistical features ────────────
-        df = self._load_flow_data(resolved)
+        df = self._load_flow_data(unsw_paths, cicids_paths)
 
         # ── Step 2: Flow-level features (vectorised pandas groupby) ────
         flow_feats = self._compute_flow_features(
@@ -223,7 +237,7 @@ class BehaviorProfiler:
     # Internal: data loading
     # ------------------------------------------------------------------
 
-    def _resolve_csv_paths(self, explicit: list[Path] | None) -> list[Path]:
+    def _resolve_unsw_paths(self, explicit: list[Path] | None) -> list[Path]:
         if explicit:
             return [Path(p) for p in explicit]
         candidates = sorted(Path(self._cfg.raw_unsw_dir).glob(_UNSW_RAW_GLOB))
@@ -233,10 +247,28 @@ class BehaviorProfiler:
             )
         return candidates
 
-    def _load_flow_data(self, csv_paths: list[Path]) -> pd.DataFrame:
-        """Load the 8 profiling columns from all raw UNSW CSVs."""
+    def _resolve_cicids_paths(self) -> list[Path]:
+        candidates = sorted(Path(self._cfg.raw_cicids_dir).glob(_CICIDS_RAW_GLOB))
+        if not candidates:
+            logger.warning("profiler_cicids_not_found", dir=str(self._cfg.raw_cicids_dir))
+        return candidates
+
+    def _load_flow_data(
+        self,
+        unsw_paths: list[Path],
+        cicids_paths: list[Path],
+    ) -> pd.DataFrame:
+        """
+        Load profiling columns from both UNSW-NB15 and CICIDS2017 CSVs,
+        then combine into a single normalised DataFrame.
+
+        Columns retained: srcip, sport, dstip, dsport, proto, sbytes, dbytes, label
+        CICIDS2017 does not have sbytes/dbytes equivalents — those are zeroed.
+        """
         frames: list[pd.DataFrame] = []
-        for p in csv_paths:
+
+        # ── UNSW-NB15 (no header, 8 cols by index) ─────────────────────
+        for p in unsw_paths:
             try:
                 chunk = pd.read_csv(
                     p,
@@ -247,18 +279,48 @@ class BehaviorProfiler:
                     encoding="latin1",
                 )
                 chunk.columns = _PROFILE_NAMES
+                # UNSW label is numeric
+                chunk["label"] = (
+                    pd.to_numeric(chunk["label"], errors="coerce")
+                    .fillna(0)
+                    .astype(np.int32)
+                )
                 frames.append(chunk)
-                logger.debug("profiler_csv_loaded", path=str(p), rows=len(chunk))
+                logger.debug("profiler_unsw_loaded", path=str(p), rows=len(chunk))
             except Exception as exc:  # noqa: BLE001
-                logger.warning("profiler_csv_skip", path=str(p), error=str(exc))
+                logger.warning("profiler_unsw_skip", path=str(p), error=str(exc))
+
+        # ── CICIDS2017 (has header, different column names) ─────────────
+        for p in cicids_paths:
+            try:
+                chunk = pd.read_csv(
+                    p,
+                    usecols=list(_CICIDS_COL_MAP.keys()),
+                    dtype=str,
+                    on_bad_lines="skip",
+                    encoding="latin1",
+                )
+                chunk = chunk.rename(columns=_CICIDS_COL_MAP)
+                # CICIDS label: 'BENIGN' → 0, else → 1
+                chunk["label"] = (
+                    chunk["label"].str.strip().ne("BENIGN").astype(np.int32)
+                )
+                # CICIDS has no sbytes/dbytes — fill with zeros
+                chunk["sbytes"] = "0"
+                chunk["dbytes"] = "0"
+                frames.append(chunk)
+                logger.debug("profiler_cicids_loaded", path=str(p), rows=len(chunk))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("profiler_cicids_skip", path=str(p), error=str(exc))
 
         if not frames:
-            raise RuntimeError("No UNSW CSV files could be loaded.")
+            raise RuntimeError("No flow CSV files could be loaded.")
 
         df = pd.concat(frames, ignore_index=True)
         df = df.dropna(subset=["srcip", "dstip"])
-        df = df[df["srcip"].str.strip() != ""]
-        df = df[df["dstip"].str.strip() != ""]
+        df["srcip"] = df["srcip"].str.strip()
+        df["dstip"] = df["dstip"].str.strip()
+        df = df[(df["srcip"] != "") & (df["dstip"] != "")]
 
         # Numeric coercions
         for col in ("sbytes", "dbytes"):
@@ -266,11 +328,6 @@ class BehaviorProfiler:
         for col in ("sport", "dsport"):
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(-1).astype(int)
 
-        df["label"] = (
-            pd.to_numeric(df["label"], errors="coerce")
-            .fillna(0)
-            .astype(np.int32)
-        )
         return df
 
     # ------------------------------------------------------------------

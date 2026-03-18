@@ -2,8 +2,14 @@
 Node2Vec Embedding Builder — Module 09 Baseline.
 
 Constructs a directed IP-level communication graph from raw UNSW-NB15
-network flows, then trains a Node2Vec (random-walk + Skip-gram) model
-to produce a 64-dimensional embedding per unique IP address.
+AND CICIDS2017 network flows, then trains a Node2Vec (random-walk +
+Skip-gram) model to produce a 64-dimensional embedding per unique IP.
+
+Why both datasets?
+    UNSW-NB15 alone has only ~50 unique IPs (controlled lab testbed) —
+    too few for Node2Vec to learn meaningful structural patterns.
+    CICIDS2017 adds ~19 K real-world IPs, giving the model a rich graph
+    to learn from.  Combined: ~19 K nodes, ~300 K deduplicated edges.
 
 These embeddings serve two roles:
     1. Feature matrix for the Isolation Forest anomaly baseline
@@ -12,13 +18,13 @@ These embeddings serve two roles:
 
 Graph construction
 ------------------
-    nodes : unique IP addresses extracted from srcip / dstip columns
-    edges : directed connections  srcip → dstip  (deduplicated by pair)
+    nodes : unique IP addresses from UNSW srcip/dstip + CICIDS Source/Dest
+    edges : directed connections  src → dst  (deduplicated by pair)
 
 Attack labels
 -------------
-    An IP is labelled attack=1 if it appeared as src OR dst in ANY
-    flow whose UNSW-NB15 Label column == 1.
+    UNSW-NB15 : Label column == 1  →  attack IP
+    CICIDS2017: Label column != 'BENIGN'  →  attack IP
 
 Node2Vec hyper-parameters
 -------------------------
@@ -51,10 +57,15 @@ logger = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------
 _UNSW_USECOLS: list[int] = [0, 2, 48]
 _UNSW_COL_NAMES: list[str] = ["srcip", "dstip", "label"]
-
-# Glob pattern that matches UNSW-NB15_1.csv … UNSW-NB15_9.csv
-# but NOT UNSW-NB15_LIST_EVENTS.csv (digit-only suffix)
 _UNSW_RAW_GLOB = "UNSW-NB15_[0-9].csv"
+
+# ---------------------------------------------------------------------------
+# CICIDS2017 CSV layout (has header row, column names have leading spaces)
+# ---------------------------------------------------------------------------
+_CICIDS_SRC_COL  = " Source IP"
+_CICIDS_DST_COL  = " Destination IP"
+_CICIDS_LBL_COL  = " Label"
+_CICIDS_RAW_GLOB = "*.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -135,25 +146,39 @@ class Node2VecEmbedder:
         csv_paths: list[Path] | None = None,
     ) -> EmbeddingResult:
         """
-        Load UNSW-NB15 raw CSVs, build an IP graph, train Node2Vec.
+        Load UNSW-NB15 + CICIDS2017 raw CSVs, build an IP graph, train Node2Vec.
 
         Parameters
         ----------
         csv_paths:
-            Explicit list of raw UNSW CSV file paths.  When ``None``,
-            auto-discovers all ``UNSW-NB15_*.csv`` files under
-            ``config.raw_unsw_dir``.
+            Explicit list of UNSW raw CSV file paths.  When ``None``,
+            auto-discovers ``UNSW-NB15_[0-9].csv`` under ``config.raw_unsw_dir``
+            AND all ``*.csv`` under ``config.raw_cicids_dir``.
 
         Returns
         -------
         EmbeddingResult
             Contains embeddings, ip_list, ip_labels, and graph stats.
         """
-        resolved = self._resolve_csv_paths(csv_paths)
-        logger.info("node2vec_fit_start", csv_count=len(resolved))
+        unsw_paths   = self._resolve_unsw_paths(csv_paths)
+        cicids_paths = self._resolve_cicids_paths()
+        logger.info(
+            "node2vec_fit_start",
+            unsw_csv_count=len(unsw_paths),
+            cicids_csv_count=len(cicids_paths),
+        )
 
-        # ── Step 1: Load flows ─────────────────────────────────────────
-        df = self._load_flows(resolved)
+        # ── Step 1: Load flows from both datasets ──────────────────────
+        df_unsw   = self._load_unsw_flows(unsw_paths)
+        df_cicids = self._load_cicids_flows(cicids_paths)
+        df = pd.concat([df_unsw, df_cicids], ignore_index=True)
+        logger.info(
+            "node2vec_flows_merged",
+            unsw_rows=len(df_unsw),
+            cicids_rows=len(df_cicids),
+            total_rows=len(df),
+            attack_rows=int((df["label"] == 1).sum()),
+        )
 
         # ── Step 2: Build homogeneous IP graph ─────────────────────────
         edge_index, ip_to_idx, ip_labels = self._build_ip_graph(df)
@@ -256,11 +281,11 @@ class Node2VecEmbedder:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _resolve_csv_paths(
+    def _resolve_unsw_paths(
         self,
         explicit: list[Path] | None,
     ) -> list[Path]:
-        """Return explicit paths if given, else auto-discover from config dir."""
+        """Return explicit UNSW paths if given, else auto-discover."""
         if explicit:
             return [Path(p) for p in explicit]
         candidates = sorted(
@@ -273,15 +298,22 @@ class Node2VecEmbedder:
             )
         return candidates
 
-    def _load_flows(self, csv_paths: list[Path]) -> pd.DataFrame:
-        """
-        Load srcip, dstip, label columns from all raw UNSW CSVs.
+    def _resolve_cicids_paths(self) -> list[Path]:
+        """Auto-discover all CICIDS2017 CSV files from config dir."""
+        candidates = sorted(
+            Path(self._cfg.raw_cicids_dir).glob(_CICIDS_RAW_GLOB)
+        )
+        if not candidates:
+            logger.warning(
+                "node2vec_cicids_not_found",
+                dir=str(self._cfg.raw_cicids_dir),
+            )
+        return candidates
 
-        Handles:
-        - No header rows (column indices used directly)
-        - Latin-1 encoding for special characters
-        - Bad / malformed rows (skipped)
-        - Non-numeric label values (coerced to 0)
+    def _load_unsw_flows(self, csv_paths: list[Path]) -> pd.DataFrame:
+        """
+        Load srcip, dstip, label from raw UNSW-NB15 CSVs (no header row).
+        Returns a DataFrame with columns: srcip, dstip, label (0/1 int).
         """
         frames: list[pd.DataFrame] = []
         for p in csv_paths:
@@ -294,43 +326,70 @@ class Node2VecEmbedder:
                     on_bad_lines="skip",
                     encoding="latin1",
                 )
-                # Rename the 3 selected columns regardless of their index
                 chunk.columns = _UNSW_COL_NAMES
                 frames.append(chunk)
-                logger.debug(
-                    "node2vec_csv_loaded",
-                    path=str(p),
-                    rows=len(chunk),
-                )
+                logger.debug("node2vec_unsw_loaded", path=str(p), rows=len(chunk))
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "node2vec_csv_skip",
-                    path=str(p),
-                    error=str(exc),
-                )
+                logger.warning("node2vec_unsw_skip", path=str(p), error=str(exc))
 
         if not frames:
             raise RuntimeError("No UNSW CSV files could be loaded.")
 
-        df = pd.concat(frames, ignore_index=True)
-
-        # Drop rows where either IP is missing or blank
-        df = df.dropna(subset=["srcip", "dstip"])
-        df = df[df["srcip"].str.strip() != ""]
-        df = df[df["dstip"].str.strip() != ""]
-
-        # Coerce label; treat unparseable values as normal (0)
+        df = self._clean_flow_df(frames)
+        # UNSW label is numeric 0/1
         df["label"] = (
             pd.to_numeric(df["label"], errors="coerce")
             .fillna(0)
             .astype(np.int32)
         )
+        return df
 
-        logger.info(
-            "node2vec_flows_loaded",
-            total_rows=len(df),
-            attack_rows=int((df["label"] == 1).sum()),
+    def _load_cicids_flows(self, csv_paths: list[Path]) -> pd.DataFrame:
+        """
+        Load srcip, dstip, label from CICIDS2017 CSVs (has header row).
+        Label is a string ('BENIGN' or attack category name).
+        Returns a DataFrame with columns: srcip, dstip, label (0/1 int).
+        """
+        if not csv_paths:
+            return pd.DataFrame(columns=["srcip", "dstip", "label"])
+
+        frames: list[pd.DataFrame] = []
+        for p in csv_paths:
+            try:
+                chunk = pd.read_csv(
+                    p,
+                    usecols=[_CICIDS_SRC_COL, _CICIDS_DST_COL, _CICIDS_LBL_COL],
+                    dtype=str,
+                    on_bad_lines="skip",
+                    encoding="latin1",
+                )
+                chunk = chunk.rename(columns={
+                    _CICIDS_SRC_COL: "srcip",
+                    _CICIDS_DST_COL: "dstip",
+                    _CICIDS_LBL_COL: "label",
+                })
+                frames.append(chunk)
+                logger.debug("node2vec_cicids_loaded", path=str(p), rows=len(chunk))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("node2vec_cicids_skip", path=str(p), error=str(exc))
+
+        if not frames:
+            return pd.DataFrame(columns=["srcip", "dstip", "label"])
+
+        df = self._clean_flow_df(frames)
+        # CICIDS label: 'BENIGN' → 0, everything else → 1
+        df["label"] = (
+            df["label"].str.strip().ne("BENIGN").astype(np.int32)
         )
+        return df
+
+    def _clean_flow_df(self, frames: list[pd.DataFrame]) -> pd.DataFrame:
+        """Concatenate frames, drop blanks, strip IP strings."""
+        df = pd.concat(frames, ignore_index=True)
+        df = df.dropna(subset=["srcip", "dstip"])
+        df["srcip"] = df["srcip"].str.strip()
+        df["dstip"] = df["dstip"].str.strip()
+        df = df[(df["srcip"] != "") & (df["dstip"] != "")]
         return df
 
     def _build_ip_graph(

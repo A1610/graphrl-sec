@@ -2,8 +2,8 @@
 Node2Vec hyper-parameter configuration — Module 09 Baseline.
 
 All defaults follow the original Node2Vec paper (Grover & Leskovec, 2016).
-Values are tuned for the UNSW-NB15 IP communication graph
-(~45 K unique IPs, ~2.5 M directed flows across 4 raw CSV files).
+Values are tuned for the combined UNSW-NB15 + CICIDS2017 IP graph
+(~19 K unique IPs, ~5.4 M directed flows across both datasets).
 """
 
 from __future__ import annotations
@@ -99,12 +99,16 @@ class Node2VecConfig(BaseSettings):
         default=Path("data/raw/unsw"),
         description="Directory containing raw UNSW-NB15 CSV files with IP columns.",
     )
+    raw_cicids_dir: Path = Field(
+        default=Path("data/raw/cicids"),
+        description="Directory containing CICIDS2017 CSV files with IP columns.",
+    )
     output_dir: Path = Field(
         default=Path("models/baseline"),
         description="Directory where Node2Vec embeddings are saved.",
     )
 
-    @field_validator("raw_unsw_dir", "output_dir", mode="before")
+    @field_validator("raw_unsw_dir", "raw_cicids_dir", "output_dir", mode="before")
     @classmethod
     def _coerce_path(cls, v: object) -> Path:
         return Path(str(v))
