@@ -89,9 +89,11 @@ def _stratified_split(
     val_frac:   float,
     test_frac:  float,
     device:     str,
-) -> tuple[list[Path], list[Path], list[Path]]:
+) -> tuple[list[Path], list[Path], list[Path], tuple[list, list]]:
     """
     Stratified train / val / test split that preserves the attack/normal ratio.
+    Also collects the union of all node/edge types seen across every window so
+    that the model can be built with the full graph schema.
 
     Attack windows are rare (~17.5%) — random splitting could leave the
     val or test set with zero attacks.  Stratified splitting guarantees
@@ -110,24 +112,35 @@ def _stratified_split(
 
     Returns
     -------
-    train_paths, val_paths, test_paths
+    train_paths, val_paths, test_paths, metadata
+        metadata is a (node_types, edge_types) tuple — union across all windows.
     """
     log = logger.bind(step="stratified_split")
-    log.info("loading_labels", n_windows=len(paths))
+    log.info("loading_labels_and_metadata", n_windows=len(paths))
 
-    # Separate attack vs normal paths
+    # Separate attack vs normal paths; collect graph metadata union in the
+    # same pass so we only load each window once.
     attack_paths: list[Path] = []
     normal_paths: list[Path] = []
+    node_types_union: set = set()
+    edge_types_union: set = set()
+
     for p in paths:
-        if _get_window_label_from_path(p, device) == 1.0:
+        data = torch.load(p, map_location=device, weights_only=False)
+        node_types_union.update(data.node_types)
+        edge_types_union.update(data.edge_types)
+        if THetGATModel.get_window_label(data) == 1.0:
             attack_paths.append(p)
         else:
             normal_paths.append(p)
 
+    metadata = (sorted(node_types_union), sorted(edge_types_union))
     log.info(
         "label_counts",
         n_attack=len(attack_paths),
         n_normal=len(normal_paths),
+        node_types=metadata[0],
+        edge_types=[f"{s}__{r}__{d}" for s, r, d in metadata[1]],
     )
 
     def _split_list(lst: list[Path]) -> tuple[list[Path], list[Path], list[Path]]:
@@ -160,7 +173,7 @@ def _stratified_split(
         val=len(val),
         test=len(test),
     )
-    return train, val, test
+    return train, val, test, metadata
 
 
 # ---------------------------------------------------------------------------
@@ -184,15 +197,17 @@ def main() -> None:
     all_paths = _discover_windows(cfg.graphs_dir)
     log.info("windows_found", total=len(all_paths))
 
-    # ── 2. Stratified split ───────────────────────────────────────────
-    train_paths, val_paths, test_paths = _stratified_split(
+    # ── 2. Stratified split + full metadata union ─────────────────────
+    # Metadata is collected in the same pass as label loading (zero extra I/O).
+    # Using the union of all windows ensures the model handles every node/edge
+    # type it will encounter during training and evaluation.
+    train_paths, val_paths, test_paths, metadata = _stratified_split(
         all_paths, cfg.val_split, cfg.test_split, device
     )
 
-    # ── 3. Build model (infer metadata from first train window) ───────
-    log.info("building_model")
-    sample = torch.load(train_paths[0], map_location=device, weights_only=False)
-    model  = THetGATModel(sample.metadata(), cfg).to(device)
+    # ── 3. Build model with full graph schema ─────────────────────────
+    log.info("building_model", node_types=metadata[0])
+    model = THetGATModel(metadata, cfg).to(device)
 
     # ── 4. Load pretrained encoder ────────────────────────────────────
     ckpt_info = THetGATModel.load_pretrained_encoder(

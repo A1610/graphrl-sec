@@ -359,11 +359,13 @@ class THetGATModel(nn.Module):
                 f"Available keys: {list(saved.keys())}"
             )
 
-        # Load with strict=True — architectures must match.
-        # THetGATConfig.hidden_dim and num_encoder_layers must equal
-        # PretrainConfig.hidden_dim and num_layers used when saving.
+        # Load with strict=False — the pretrained encoder may have been trained
+        # on graphs with a different set of edge/node types than the current
+        # dataset.  Weights that match (e.g. input_projs for shared node types,
+        # SAGEConv layers for shared edge types) are transferred; the rest keep
+        # their random initialisation and are fine-tuned from scratch.
         missing, unexpected = model.encoder.load_state_dict(
-            saved["model_state"], strict=True
+            saved["model_state"], strict=False
         )
 
         log = logger.bind(
