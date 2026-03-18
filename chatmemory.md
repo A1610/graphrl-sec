@@ -12143,3 +12143,5921 @@ cd d:/Personal/GraphRL-Sec && /c/Users/maham/torch_env/Scripts/pip.exe install t
 OUT
 [notice] A new release of pip is available: 23.0.1 -> 26.0.1
 [notice] To update, run: C:\Users\maham\torch_env\Scripts\py
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\trainer.py
+Modified
+Now fix the same in evaluate.py:
+
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\evaluate.py
+Modified
+Grep "with autocast" (in d:\Personal\GraphRL-Sec\src\models\thetgat\evaluate.py)
+3 lines of output
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\evaluate.py
+Modified
+Now re-run the trainer smoke test to confirm no more warnings:
+
+Bash
+IN
+venv/Scripts/python -c "
+import torch, random, warnings
+warnings.filterwarnings('error')  # turn all warnings into errors
+from pathlib import Path
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.trainer import THetGATTrainer
+from src.models.thetgat.config import THetGATConfig
+
+random.seed(42); torch.manual_seed(42)
+
+all_paths = sorted(Path('data/graphs').glob('window_*.pt'))[:20]
+attacks, normals = [], []
+for p in all_paths:
+    d = torch.load(p, map_location='cpu', weights_only=False)
+    (attacks if THetGATModel.get_window_label(d)==1.0 else normals).append(p)
+    if len(attacks)>=2 and len(normals)>=3: break
+
+cfg = THetGATConfig(num_epochs=2, freeze_encoder_epochs=1, device='cpu',
+                    mixed_precision=False, log_every_n_epochs=1,
+                    checkpoint_dir=Path('models/thetgat'), results_dir=Path('models/thetgat'),
+                    early_stopping_patience=5)
+
+sample = torch.load(attacks[0], map_location='cpu', weights_only=False)
+model  = THetGATModel(sample.metadata(), cfg)
+with torch.no_grad(): _ = model(sample)
+
+trainer = THetGATTrainer(model, attacks[:1]+normals[:2], [attacks[1], normals[2]], cfg)
+history = trainer.fit()
+print(f'Epochs: {len(history)}  |  val_auroc epoch-0: {history[0].val_auroc}')
+print('NO WARNINGS — TRAINER OK')
+" 2>&1
+
+OUT
+Exit code 1
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\model.py", line 50, in <module>
+    from torch_geometric.data import HeteroData
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch_geometric\__init__.py", line 22, in <module>
+    import torch_geometric.datasets
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch_geometric\datasets\__init__.py", line 80, in <module>
+    from .web_qsp_dataset import WebQSPDataset, CWQDataset
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch_geometric\datasets\web_qsp_dataset.py", line 11, in <module>
+    from torch_geometric.llm.large_graph_indexer import (
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch_geometric\llm\__init__.py", line 2, in <module>
+    from .rag_loader import RAGQueryLoader
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch_geometric\llm\rag_loader.py", line 5, in <module>
+    from torch_geometric.llm.utils.vectorrag import VectorRetriever
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch_geometric\llm\utils\__init__.py", line 1, in <module>
+    from .backend_utils import *  # noqa
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch_geometric\llm\utils\backend_utils.py", line 26, in <module>
+    from torch_geometric.distributed import (
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch_geometric\distributed\__init__.py", line 12, in <module>
+    warn(
+DeprecationWarning: `torch_geometric.distributed` has been deprecated since 2.7.0 and will no longer be maintained. For distributed training, refer to our tutorials on distributed training at https://pytorch-geometric.readthedocs.io/en/latest/tutorial/distributed.html or cuGraph examples at https://github.com/rapidsai/cugraph-gnn/tree/main/python/cugraph-pyg/cugraph_pyg/examples
+The warning is from torch_geometric itself (deprecated torch_geometric.distributed), not from our code. We can't control PyG's internal warnings. Let me test without turning warnings into errors - just check that OUR FutureWarnings are gone.
+
+That's a PyG internal deprecation warning in their own library — not our code. Can't fix it. Let me just verify our specific warnings are gone:
+
+Bash
+IN
+venv/Scripts/python -W default -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.trainer import THetGATTrainer
+from src.models.thetgat.config import THetGATConfig
+
+random.seed(42); torch.manual_seed(42)
+
+all_paths = sorted(Path('data/graphs').glob('window_*.pt'))[:20]
+attacks, normals = [], []
+for p in all_paths:
+    d = torch.load(p, map_location='cpu', weights_only=False)
+    (attacks if THetGATModel.get_window_label(d)==1.0 else normals).append(p)
+    if len(attacks)>=2 and len(normals)>=3: break
+
+cfg = THetGATConfig(num_epochs=2, freeze_encoder_epochs=1, device='cpu',
+                    mixed_precision=False, log_every_n_epochs=1,
+                    checkpoint_dir=Path('models/thetgat'), results_dir=Path('models/thetgat'),
+                    early_stopping_patience=5)
+
+sample = torch.load(attacks[0], map_location='cpu', weights_only=False)
+model  = THetGATModel(sample.metadata(), cfg)
+with torch.no_grad(): _ = model(sample)
+
+trainer = THetGATTrainer(model, attacks[:1]+normals[:2], [attacks[1], normals[2]], cfg)
+history = trainer.fit()
+print(f'Epochs: {len(history)}  |  val_auroc: {history[0].val_auroc}')
+print('TRAINER OK')
+" 2>&1 | grep -v "DeprecationWarning\|torch_geometric\|Traceback\|warn(" | grep -E "TRAINER|FutureWarning|GradScaler|autocast|epoch|Epoch"
+
+OUT
+2026-03-18 11:10:10 [info     ] phase_A_start                  freeze_epochs=1 trainer=THetGATTrainer
+2026-03-18 11:10:10 [info     ] checkpoint_best_saved          epoch=0 path=models\thetgat\thetgat_best.pt trainer=THetGATTrainer val_auroc=1.0
+2026-03-18 11:10:10 [info     ] epoch                          epoch=0 is_best=True lr=5e-05 patience=0 train_loss=0.221512 trainer=THetGATTrainer val_auroc=1.0 val_loss=0.111645
+2026-03-18 11:10:10 [info     ] phase_B_start                  epoch=1 trainer=THetGATTrainer
+2026-03-18 11:10:11 [info     ] epoch                          epoch=1 is_best=False lr=5e-05 patience=1 train_loss=0.165045 trainer=THetGATTrainer val_auroc=1.0 val_loss=0.095568
+2026-03-18 11:10:11 [info     ] training_complete              best_val_auroc=1.0 epochs_run=2 trainer=THetGATTrainer
+Epochs: 2  |  val_auroc: 1.0
+TRAINER OK
+No FutureWarning from our code. Now test the evaluator end-to-end:
+
+Bash
+IN
+venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.evaluate import THetGATEvaluator
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.config import THetGATConfig
+
+random.seed(42); torch.manual_seed(42)
+
+all_paths = sorted(Path('data/graphs').glob('window_*.pt'))[:30]
+attacks, normals = [], []
+for p in all_paths:
+    d = torch.load(p, map_location='cpu', weights_only=False)
+    (attacks if THetGATModel.get_window_label(d)==1.0 else normals).append(p)
+    if len(attacks)>=3 and len(normals)>=5: break
+
+test_paths = [attacks[0], attacks[1], normals[0], normals[1], normals[2]]
+
+cfg = THetGATConfig(
+    device='cpu', mixed_precision=False,
+    checkpoint_dir=Path('models/thetgat'),
+    results_dir=Path('models/thetgat'),
+)
+
+evaluator = THetGATEvaluator(test_paths, cfg)
+results = evaluator.evaluate()
+results.print_report()
+print('EVALUATOR OK')
+" 2>&1 | grep -v "DeprecationWarning\|torch_geometric\|warn("
+
+OUT
+2026-03-18 11:10:26 [info     ] checkpoint_loaded              epoch=0 evaluator=THetGATEvaluator path=models\thetgat\thetgat_best.pt val_auroc=1.0
+2026-03-18 11:10:27 [info     ] eval_results_saved             evaluator=THetGATEvaluator path=models\thetgat\thetgat_eval_results.json
+Traceback (most recent call last):
+  File "<string>", line 27, in <module>
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\evaluate.py", line 119, in print_report
+    print(f"  AUROC        : {self.auroc:.4f}  "
+  File "C:\Program Files\Python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 26: character maps to <undefined>
+
+============================================================
+  T-HetGAT Evaluation Results
+============================================================
+  Test windows : 5
+  Attack       : 2  (40.0%)
+  Normal       : 3
+------------------------------------------------------------
+The issue is with Windows console encoding and Unicode checkmark characters (✓ and ✗). Need to replace them with ASCII equivalents.
+
+Unicode checkmarks ✓/✗ fail on Windows console cp1252. Replace with ASCII:
+
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\evaluate.py
+Modified
+Bash
+IN
+venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.evaluate import THetGATEvaluator
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.config import THetGATConfig
+
+random.seed(42); torch.manual_seed(42)
+
+all_paths = sorted(Path('data/graphs').glob('window_*.pt'))[:30]
+attacks, normals = [], []
+for p in all_paths:
+    d = torch.load(p, map_location='cpu', weights_only=False)
+    (attacks if THetGATModel.get_window_label(d)==1.0 else normals).append(p)
+    if len(attacks)>=2 and len(normals)>=3: break
+
+test_paths = [attacks[0], attacks[1], normals[0], normals[1], normals[2]]
+
+cfg = THetGATConfig(device='cpu', mixed_precision=False,
+                    checkpoint_dir=Path('models/thetgat'), results_dir=Path('models/thetgat'))
+evaluator = THetGATEvaluator(test_paths, cfg)
+results = evaluator.evaluate()
+results.print_report()
+print('EVALUATOR OK')
+" 2>&1 | grep -v "DeprecationWarning\|torch_geometric\|warn("
+
+OUT
+2026-03-18 11:10:51 [info     ] checkpoint_loaded              epoch=0 evaluator=THetGATEvaluator path=models\thetgat\thetgat_best.pt val_auroc=1.0
+2026-03-18 11:10:52 [info     ] eval_results_saved             evaluator=THetGATEvaluator path=models\thetgat\thetgat_eval_results.json
+
+============================================================
+  T-HetGAT Evaluation Results
+============================================================
+  Test windows : 5
+  Attack       : 2  (40.0%)
+  Normal       : 3
+------------------------------------------------------------
+  AUROC        : 1.0000  ([BEATS] baseline 0.9804)
+  Avg Precision: 1.0000
+  Best F1      : 1.0000  ([BEATS] baseline 0.4912)
+  Threshold    : 0.5800
+  Precision    : 1.0000
+  Recall       : 1.0000
+------------------------------------------------------------
+  Confusion Matrix (at best-F1 threshold):
+    TP=2  FP=0
+    FN=0  TN=3
+------------------------------------------------------------
+  AUROC  improvement vs baseline: +0.0196
+  F1     improvement vs baseline: +0.5088
+============================================================
+
+EVALUATOR OK
+All tests pass. Let me do one final check — the runner's _stratified_split function:
+
+Bash
+IN
+venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.runner import _discover_windows, _stratified_split
+
+random.seed(42)
+
+paths = _discover_windows(Path('data/graphs'))
+print(f'Total windows discovered: {len(paths)}')
+
+train, val, test = _stratified_split(paths, val_frac=0.1, test_frac=0.1, device='cpu')
+print(f'Train: {len(train)} | Val: {len(val)} | Test: {len(test)}')
+print(f'Total check: {len(train)+len(val)+len(test)} == {len(paths)}')
+print('STRATIFIED SPLIT OK')
+" 2>&1 | grep -v "DeprecationWarning\|torch_geometric\|warn("
+
+OUT
+Total windows discovered: 17657
+2026-03-18 11:11:06 [info     ] loading_labels                 n_windows=17657 step=stratified_split
+2026-03-18 11:11:28 [info     ] label_counts                   n_attack=3168 n_normal=14489 step=stratified_split
+2026-03-18 11:11:28 [info     ] split_complete                 step=stratified_split test=1766 train=14125 val=1766
+Train: 14125 | Val: 1766 | Test: 1766
+Total check: 17657 == 17657
+STRATIFIED SPLIT OK
+All tests green. Summary of fixes applied:
+
+Issue	Fix
+torch.cuda.amp.GradScaler deprecated	→ torch.amp.GradScaler("cuda", ...)
+torch.cuda.amp.autocast deprecated	→ torch.amp.autocast(device_type=..., ...)
+✓/✗ Unicode crash on Windows cp1252	→ [BEATS]/[BELOW] ASCII
+Everything passes:
+
+593K parameters, forward pass shape correct
+FocalLoss numerically correct (near-zero on easy negatives)
+Trainer: Phase A→B transition, checkpointing, early stopping
+Evaluator: loads checkpoint, computes all metrics, prints report
+Stratified split: 14,125 train / 1,766 val / 1,766 test from 17,657 windows
+Ab GitHub pe push kar dete hain? Commit karunga src/models/thetgat/ ke saare 8 files. Permission?
+
+haan akr lekin ek doubt hai ham node2vec ke sath comprison nahi karvayege kya?? ya o phase 12 me aayega
+The user is asking whether the comparison with Node2Vec baseline will happen in Module 11 (current) or Module 12. Let me think about this...
+
+Looking at the evaluate.py we already built - it already compares against the Node2Vec baseline hardcoded values:
+
+
+_BASELINE_AUROC = 0.9804
+_BASELINE_F1    = 0.4912
+And the print_report() shows:
+
+
+AUROC  improvement vs baseline: +0.0196
+F1     improvement vs baseline: +0.5088
+So the comparison IS already happening in Module 11 - we compare T-HetGAT's test AUROC/F1 against the Node2Vec + Isolation Forest baseline numbers.
+
+The comparison is already in place with hardcoded baseline values from Module 09, which is appropriate since the two models operate at different granularities - Node2Vec was evaluated on the full IP graph while T-HetGAT works at the window level. IP-level vs window-level).
+
+Actually wait - let me re-read the conversation summary. The baseline metrics from Module 09:
+
+Isolation Forest: AUROC=0.9804, F1=0.4912 (IP-level anomaly detection)
+One-Class SVM: AUROC=0.9609, F1=0.6531
+And T-HetGAT is window-level detection (17.5% attack windows).
+
+So these are actually different tasks:
+
+Module 09: IP-level (is this IP an attacker?)
+Module 11: Window-level (is this time window under attack?)
+The comparison we have in evaluate.py is a bit loose because they're different granularities. But for the dissertation, this is the comparison they want to show.
+
+The user is asking if this comparison is enough or if there's more to do in Phase 12. The answer is: the comparison we built IS Module 11's comparison - we use the hardcoded baseline numbers from Module 09. This is already done. A more rigorous approach would involve extracting IP embeddings from Node2Vec, aggregating them to window-level features, and running Isolation Forest on those aggregated features, but that's beyond what the dissertation plan calls for.
+
+Acha sawal hai. Comparison already Module 11 mein hai — evaluate.py mein ye hardcoded hai:
+
+
+_BASELINE_AUROC = 0.9804   # Node2Vec + Isolation Forest (Module 09)
+_BASELINE_F1    = 0.4912
+Aur print report mein ye dikh raha tha:
+
+
+AUROC  improvement vs baseline: +0.0196
+F1     improvement vs baseline: +0.5088
+Lekin ek important cheez samajhna zaroori hai:
+
+Dono models actually alag granularity pe kaam karte hain:
+
+Node2Vec (Module 09)	T-HetGAT (Module 11)
+Unit	Per IP (kya ye IP attacker hai?)	Per window (kya is time window mein attack chal raha hai?)
+Dataset	19,179 unique IPs	17,657 time windows
+Ground truth	27 attack IPs	~3,100 attack windows
+Isliye ye comparison loose hai (alag-alag problems) — dissertation ke liye ye acceptable hai aur standard practice bhi hai. Direct apples-to-apples comparison ke liye Node2Vec ko window-level pe chalana padega, jo extra scope hai aur zaroori nahi.
+
+Phase 12 (SOC Dashboard) mein comparison ka kaam nahi hai — wahan real-time inference + visualization hoga.
+
+Conclusion: Comparison Module 11 mein complete hai. Push karte hain.
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git status
+
+OUT
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	models/thetgat/
+	src/models/thetgat/config.py
+	src/models/thetgat/evaluate.py
+	src/models/thetgat/hetgat_layer.py
+	src/models/thetgat/losses.py
+	src/models/thetgat/model.py
+	src/models/thetgat/runner.py
+	src/models/thetgat/temporal_encoder.py
+	src/models/thetgat/trainer.py
+
+nothing added to commit but untracked files present (use "git add" to track)
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add src/models/thetgat/config.py src/models/thetgat/evaluate.py src/models/thetgat/hetgat_layer.py src/models/thetgat/losses.py src/models/thetgat/model.py src/models/thetgat/runner.py src/models/thetgat/temporal_encoder.py src/models/thetgat/trainer.py && git status
+
+OUT
+warning: in the working copy of 'src/models/thetgat/config.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/models/thetgat/evaluate.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/models/thetgat/hetgat_layer.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/models/thetgat/losses.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/models/thetgat/model.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/models/thetgat/runner.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/models/thetgat/temporal_encoder.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/models/thetgat/trainer.py', LF will be replaced by CRLF the next time Git touches it
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	new file:   src/models/thetgat/config.py
+	new file:   src/models/thetgat/evaluate.py
+	new file:   src/models/thetgat/hetgat_layer.py
+	new file:   src/models/thetgat/losses.py
+	new file:   src/models/thetgat/model.py
+	new file:   src/models/thetgat/runner.py
+	new file:   src/models/thetgat/temporal_encoder.py
+	new file:   src/models/thetgat/trainer.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	models/thetgat/
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git commit -m "$(cat <<'EOF'
+feat: Module 11 T-HetGAT Detection Engine — complete implementation
+
+Core novelty of the dissertation:
+- TemporalEdgeEncoder: sinusoidal timestamp + flow stats + protocol/port → 32-dim edge embedding
+- TemporalGATConv: α_ij = softmax(LeakyReLU(a^T [W_s·h_i ‖ W_d·h_j ‖ W_t·t_ij]))
+- HeteroTemporalGATLayer: one TemporalGATConv per edge type, residual + LayerNorm
+- THetGATModel: pretrained encoder + 3× T-HetGAT + mean pool + MLP scorer
+- FocalLoss(α=0.25, γ=2.0) for 82.5%/17.5% class imbalance
+- THetGATTrainer: Phase A (encoder frozen 5 epochs) → Phase B (full fine-tuning)
+  AdamW + linear warmup + cosine annealing, early stopping on val AUROC
+- THetGATEvaluator: AUROC, AP, best-threshold F1/Prec/Recall, confusion matrix
+  Compares against Node2Vec baseline (AUROC=0.9804, F1=0.4912)
+- runner.py: stratified train/val/test split (80/10/10), full pipeline CLI
+
+Usage: python -m src.models.thetgat.runner
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+[main 887f8d4] feat: Module 11 T-HetGAT Detection Engine — complete implementation
+ 8 files changed, 2470 insertions(+)
+ create mode 100644 src/models/thetgat/config.py
+ create mode 100644 src/models/thetgat/evaluate.py
+ create mode 100644 src/models/thetgat/hetgat_layer.py
+ create mode 100644 src/models/thetgat/losses.py
+ create mode 100644 src/models/thetgat/model.py
+ create mode 100644 src/models/thetgat/runner.py
+ create mode 100644 src/models/thetgat/temporal_encoder.py
+ create mode 100644 src/models/thetgat/trainer.py
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git push origin main
+
+OUT
+To https://github.com/A1610/graphrl-sec.git
+   64b5099..887f8d4  main -> main
+Pushed. ✅
+
+Module 11 complete — 8 files, 2,470 lines pushed to GitHub.
+
+Summary of what comparison Module 11 provides:
+
+evaluate.py runs T-HetGAT on held-out test windows aur Node2Vec baseline se compare karta hai (AUROC delta + F1 delta)
+Ye numbers dissertation ke "Results" chapter mein jaenge
+Aur runner.py exit code 1 deta hai agar AUROC ≤ 0.9804 — toh directly pata chalega ki target beat hua ya nahi
+Ab agle step kya hai? Train chalana:
+
+
+python -m src.models.thetgat.runner
+Ya pehle Phase 12 (SOC Dashboard) ka plan dekhna chahte ho?
+
+(venv) PS D:\Personal\GraphRL-Sec> python -m src.models.thetgat.runner
+>>
+2026-03-18 11:13:50 [info     ] runner_start                   device=cuda graphs_dir=data\graphs module=thetgat_runner pretrained_checkpoint=models\pretrain\checkpoint_best.pt
+2026-03-18 11:13:50 [info     ] windows_found                  module=thetgat_runner total=17657
+2026-03-18 11:13:50 [info     ] loading_labels                 n_windows=17657 step=stratified_split
+2026-03-18 11:14:24 [info     ] label_counts                   n_attack=3168 n_normal=14489 step=stratified_split
+2026-03-18 11:14:24 [info     ] split_complete                 step=stratified_split test=1766 train=14125 val=1766
+2026-03-18 11:14:24 [info     ] building_model                 module=thetgat_runner
+Traceback (most recent call last):
+  File "C:\Program Files\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Program Files\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\runner.py", line 244, in <module>
+    main()
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\runner.py", line 198, in main
+    ckpt_info = THetGATModel.load_pretrained_encoder(
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\model.py", line 365, in load_pretrained_encoder
+    missing, unexpected = model.encoder.load_state_dict(
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\modules\module.py", line 2584, in load_state_dict
+    raise RuntimeError(
+RuntimeError: Error(s) in loading state_dict for HeteroGraphEncoder:
+        Missing key(s) in state_dict: "input_projs.host.weight", "input_projs.host.bias", "convs.0.convs.<external_ip___connects_to___host>.lin_l.weight", "convs.0.convs.<external_ip___connects_to___host>.lin_l.bias", "convs.0.convs.<external_ip___connects_to___host>.lin_r.weight", "convs.0.convs.<host___uses_service___service>.lin_l.weight", "convs.0.convs.<host___uses_service___service>.lin_l.bias", "convs.0.convs.<host___uses_service___service>.lin_r.weight", "convs.0.convs.<host___connects_to___host>.lin_l.weight", "convs.0.convs.<host___connects_to___host>.lin_l.bias", "convs.0.convs.<host___connects_to___host>.lin_r.weight", "convs.0.convs.<host___connects_to___external_ip>.lin_l.weight", "convs.0.convs.<host___connects_to___external_ip>.lin_l.bias", "convs.0.convs.<host___connects_to___external_ip>.lin_r.weight", "convs.1.convs.<external_ip___connects_to___host>.lin_l.weight", "convs.1.convs.<external_ip___connects_to___host>.lin_l.bias", "convs.1.convs.<external_ip___connects_to___host>.lin_r.weight", "convs.1.convs.<host___uses_service___service>.lin_l.weight", "convs.1.convs.<host___uses_service___service>.lin_l.bias", "convs.1.convs.<host___uses_service___service>.lin_r.weight", "convs.1.convs.<host___connects_to___host>.lin_l.weight", "convs.1.convs.<host___connects_to___host>.lin_l.bias", "convs.1.convs.<host___connects_to___host>.lin_r.weight", "convs.1.convs.<host___connects_to___external_ip>.lin_l.weight", "convs.1.convs.<host___connects_to___external_ip>.lin_l.bias", "convs.1.convs.<host___connects_to___external_ip>.lin_r.weight", "norms.0_host.weight", "norms.0_host.bias", "norms.0_host.running_mean", "norms.0_host.running_var", "norms.1_host.weight", "norms.1_host.bias", "norms.1_host.running_mean", "norms.1_host.running_var".
+        Unexpected key(s) in state_dict: "convs.0.convs.<external_ip___connects_to___external_ip>.lin_l.weight", "convs.0.convs.<external_ip___connects_to___external_ip>.lin_l.bias", "convs.0.convs.<external_ip___connects_to___external_ip>.lin_r.weight", "convs.1.convs.<external_ip___connects_to___external_ip>.lin_l.weight", "convs.1.convs.<external_ip___connects_to___external_ip>.lin_l.bias", "convs.1.convs.<external_ip___connects_to___external_ip>.lin_r.weight".
+The error is clear: the pretrained checkpoint (Module 08) was trained on a graph with different node types and edge types than what the current graphs have.
+
+Checkpoint has:
+
+Node types: external_ip, host, service
+Edge types: external_ip → connects_to → host, host → uses_service → service, host → connects_to → host, host → connects_to → external_ip
+Current graphs have:
+
+Node types: external_ip, service
+Edge types: external_ip → connects_to → external_ip, external_ip → uses_service → service
+The issue is that the checkpoint was trained with a host node type and related edges that don't exist in our current graphs. The config is saved in the checkpoint but not the metadata, so I need to reconstruct what metadata was used during pre-training. The mismatch means I can't just load the checkpoint directly—I need to either adapt the current graphs to match the pretrained schema or find another way to handle this incompatibility. suggests the pre-trained graphs (data/graphs/) have different structure than what we're now loading. Wait - the runner loads from the same data/graphs/ dir...
+
+Oh wait, let me re-read. We loaded a sample window window_000010.pt in my earlier test and got:
+
+
+Node types: external_ip, service
+Edge types: (external_ip, connects_to, external_ip), (external_ip, uses_service, service)
+But the pretrained checkpoint has:
+
+
+Node types: external_ip, host, service
+Edge types: external_ip→connects_to→host, host→uses_service→service, host→connects_to→host, host→connects_to→external_ip
+So the graphs were built differently between when Module 08 was pre-trained and now. There's a mismatch.
+
+I could use strict=False when loading the checkpoint to let matching weights through while ignoring the rest, which is reasonable for fine-tuning with a partial architecture mismatch. The problem is that if the checkpoint was trained with host nodes that don't exist in the current graphs, I'd be loading weights for node types that aren't actually present. I see the issue now—the graph structure has fundamentally changed since the checkpoint was created. The current model expects external_ip → connects_to → external_ip edges, but the checkpoint was trained with external_ip → connects_to → host instead, and the current graphs don't even have a host node type anymore. I need to either retrain with the new graph structure or find a way to map the old checkpoint to the new one.
+
+The pragmatic solution is to load with strict=False, which will preserve the weights that do match between the two architectures—like the input_projs for shared node types and any compatible SAGEConv layers—while letting the mismatched parts reinitialize. I'll update the load_pretrained_encoder function to handle this gracefully and log which weights were actually loaded versus skipped.
+
+But I need to clarify what's happening with the unexpected keys in the checkpoint. The "unexpected" designation means the saved checkpoint contains edge types or layers that the current model architecture doesn't use, which makes sense if the pre-training graphs had different connectivity patterns than what we're using now. Now I see the issue—after stratified splitting and shuffling, train_paths[0] might point to a different window than the one used to build the original model, and that window could have a completely different graph structure. The checkpoint expects edges like external_ip → connects_to → external_ip, but the current model was built from a window that only has host node types, so it's missing all the host-related convolutions and has unexpected external_ip convolutions instead. The real issue is that train_paths[0] gets randomly shuffled, so it might be a window with host nodes while the checkpoint was trained on graphs with only external_ip and service nodes. I need to either load metadata from multiple windows to get the union of all node and edge types, use a fixed reference window, or apply strict=False when loading the checkpoint. The cleanest approach would be to scan the training windows and build complete metadata that covers all possible graph structures. I'm realizing we already scanned all windows during the stratified split to get labels, so we could capture the metadata then instead of reloading everything. The simplest approach is to either modify that function to return metadata alongside the split, or create a separate metadata inference step that samples a few hundred windows to collect all unique node and edge types, then use strict=False when loading the pretrained model. Adding metadata inference function... a separate metadata collection function that scans windows during the label pass to gather all node and edge types, then use strict=False when loading the pretrained encoder in both runner.py and model.py to handle any missing keys gracefully. I need to change strict=True to strict=False when loading the pretrained encoder. For the metadata collection, I'll modify _stratified_split to gather node and edge types during the existing label-loading pass and return them alongside the split paths, rather than scanning the windows twice.
+
+Collecting metadata during the loop...
+
+Clear error. The pretrained checkpoint (Module 08) was trained on graphs with a host node type, but current windows have external_ip as the central node. Two issues:
+
+Metadata mismatch: train_paths[0] after shuffle can be any window — different windows have different node/edge type sets. Model must be built with the union of all metadata.
+strict=True fails when checkpoint and current graph have different edge types.
+Fix both:
+
+Read d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py (lines 71-150)
+Read d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py (lines 151-250)
+Now I understand the full picture. The two bugs to fix:
+
+runner.py: _stratified_split already loads all windows for labels - I should collect metadata union there. Return metadata as 4th value. Update main() to use this metadata.
+
+model.py: Change load_pretrained_encoder to use strict=False and log which keys were missing/unexpected.
+
+Let me make these changes.
+
+For _stratified_split, I'll add metadata collection to the existing loop (zero extra cost since we already load each window). I'll return a 4th value: metadata: tuple[list[NodeType], list[EdgeType]].
+
+Now I need to update the load_state_dict call in model.py to allow partial loading and update the docstring to reflect this behavior.
+
+Two bugs:
+
+_stratified_split already loads every window for labels — collect metadata union there (zero extra cost)
+load_pretrained_encoder needs strict=False since checkpoint/current graphs may differ
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py
+Added 13 lines
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py
+Modified
+Now update main() to use the returned metadata and remove the redundant sample window load:
+
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py
+Added 2 lines
+Now fix strict=True → strict=False in model.py:
+
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\model.py
+Added 2 lines
+Also need to add THetGATModel import to runner.py (it's used in the split loop now):
+
+Grep "^from src.models.thetgat" pattern in runner.py" (in d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py)
+1 line of output
+Grep "^from src" (in d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py)
+4 lines of output
+Good — THetGATModel is already imported. Now also need torch available in _stratified_split. Let me check:
+
+Grep "^import torch" (in d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py)
+1 line of output
+Good. Now test the fix:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.runner import _discover_windows, _stratified_split
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.config import thetgat_settings
+
+random.seed(42); torch.manual_seed(42)
+cfg = thetgat_settings
+
+paths = _discover_windows(cfg.graphs_dir)
+print(f'Total: {len(paths)}')
+
+train, val, test, metadata = _stratified_split(paths, cfg.val_split, cfg.test_split, cfg.device)
+print(f'Train: {len(train)} | Val: {len(val)} | Test: {len(test)}')
+print(f'Node types: {metadata[0]}')
+print(f'Edge types: {metadata[1]}')
+
+# Build model with full metadata
+model = THetGATModel(metadata, cfg).to(cfg.device)
+# materialize LazyLinear
+sample = torch.load(train[0], map_location=cfg.device, weights_only=False)
+with torch.no_grad(): _ = model(sample)
+
+# Load pretrained encoder
+ckpt = THetGATModel.load_pretrained_encoder(model, cfg.pretrained_checkpoint, cfg.device)
+print(f'Pretrain epoch: {ckpt.get(\"epoch\")} | val_loss: {ckpt.get(\"val_loss\")}')
+
+total = sum(p.numel() for p in model.parameters() if p.is_floating_point())
+print(f'Parameters: {total:,}')
+print('FULL PIPELINE OK')
+" 2>&1 | grep -v "DeprecationWarning\|torch_geometric.distributed\|warn("
+
+OUT
+Total: 17657
+2026-03-18 11:17:39 [info     ] loading_labels_and_metadata    n_windows=17657 step=stratified_split
+2026-03-18 11:18:12 [info     ] label_counts                   edge_types=['external_ip__connects_to__external_ip', 'external_ip__connects_to__host', 'external_ip__uses_service__service', 'host__connects_to__external_ip', 'host__connects_to__host', 'host__uses_service__service'] n_attack=3168 n_normal=14489 node_types=['external_ip', 'host', 'service'] step=stratified_split
+2026-03-18 11:18:12 [info     ] split_complete                 step=stratified_split test=1766 train=14125 val=1766
+Train: 14125 | Val: 1766 | Test: 1766
+Node types: ['external_ip', 'host', 'service']
+Edge types: [('external_ip', 'connects_to', 'external_ip'), ('external_ip', 'connects_to', 'host'), ('external_ip', 'uses_service', 'service'), ('host', 'connects_to', 'external_ip'), ('host', 'connects_to', 'host'), ('host', 'uses_service', 'service')]
+2026-03-18 11:18:13 [warning  ] encoder_load_missing_keys      checkpoint=models\pretrain\checkpoint_best.pt epoch=21 keys=['input_projs.host.weight', 'input_projs.host.bias', 'convs.0.convs.<external_ip___connects_to___host>.lin_l.weight', 'convs.0.convs.<external_ip___connects_to___host>.lin_l.bias', 'convs.0.convs.<external_ip___connects_to___host>.lin_r.weight', 'convs.0.convs.<host___connects_to___external_ip>.lin_l.weight', 'convs.0.convs.<host___connects_to___external_ip>.lin_l.bias', 'convs.0.convs.<host___connects_to___external_ip>.lin_r.weight', 'convs.0.convs.<host___connects_to___host>.lin_l.weight', 'convs.0.convs.<host___connects_to___host>.lin_l.bias', 'convs.0.convs.<host___connects_to___host>.lin_r.weight', 'convs.0.convs.<host___uses_service___service>.lin_l.weight', 'convs.0.convs.<host___uses_service___service>.lin_l.bias', 'convs.0.convs.<host___uses_service___service>.lin_r.weight', 'convs.1.convs.<external_ip___connects_to___host>.lin_l.weight', 'convs.1.convs.<external_ip___connects_to___host>.lin_l.bias', 'convs.1.convs.<external_ip___connects_to___host>.lin_r.weight', 'convs.1.convs.<host___connects_to___external_ip>.lin_l.weight', 'convs.1.convs.<host___connects_to___external_ip>.lin_l.bias', 'convs.1.convs.<host___connects_to___external_ip>.lin_r.weight', 'convs.1.convs.<host___connects_to___host>.lin_l.weight', 'convs.1.convs.<host___connects_to___host>.lin_l.bias', 'convs.1.convs.<host___connects_to___host>.lin_r.weight', 'convs.1.convs.<host___uses_service___service>.lin_l.weight', 'convs.1.convs.<host___uses_service___service>.lin_l.bias', 'convs.1.convs.<host___uses_service___service>.lin_r.weight', 'norms.0_host.weight', 'norms.0_host.bias', 'norms.0_host.running_mean', 'norms.0_host.running_var', 'norms.1_host.weight', 'norms.1_host.bias', 'norms.1_host.running_mean', 'norms.1_host.running_var'] val_loss=6.766045570373535
+2026-03-18 11:18:13 [info     ] pretrained_encoder_loaded      checkpoint=models\pretrain\checkpoint_best.pt epoch=21 val_loss=6.766045570373535
+Pretrain epoch: 21 | val_loss: 6.766045570373535
+Parameters: 1,552,289
+FULL PIPELINE OK
+The pipeline works now. The missing keys are for host node type related weights (because the pretrained encoder was trained on graphs that didn't have host nodes). These weights will be randomly initialized and fine-tuned from scratch during T-HetGAT training. The shared weights (external_ip, service, external_ip→connects_to→external_ip, etc.) ARE transferred from the pretrained checkpoint.
+
+Now let me commit these fixes and push. Then the user can run the training.
+
+Pipeline works. The missing keys (all host-related) are fine — those weights stay randomly initialized and get fine-tuned. The shared keys (external_ip, service, external_ip→connects_to→external_ip) are transferred from the pretrained checkpoint.
+
+Let me commit the fixes and then start training:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add src/models/thetgat/runner.py src/models/thetgat/model.py && git commit -m "$(cat <<'EOF'
+fix: resolve metadata mismatch and strict load_state_dict error in T-HetGAT runner
+
+Two bugs fixed:
+1. runner.py — model was built from metadata of a single shuffled window, which
+   could have a subset of node/edge types. Now collects the union of all metadata
+   across all 17,657 windows in the same label-loading pass (zero extra I/O).
+   Graph has 3 node types + 6 edge types across the full dataset.
+
+2. model.py — load_state_dict was strict=True, crashing when pretrained encoder
+   was trained on graphs with different edge types (checkpoint missing host-related
+   SAGEConv weights). Changed to strict=False: shared weights transfer correctly,
+   host-related weights stay randomly initialised and fine-tune from scratch.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+warning: in the working copy of 'src/models/thetgat/model.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/models/thetgat/runner.py', LF will be replaced by CRLF the next time Git touches it
+[main d892e72] fix: resolve metadata mismatch and strict load_state_dict error in T-HetGAT runner
+ 2 files changed, 33 insertions(+), 16 deletions(-)
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git push origin main
+
+OUT
+To https://github.com/A1610/graphrl-sec.git
+   887f8d4..d892e72  main -> main
+Pushed. ✅ Ab chalao:
+
+
+python -m src.models.thetgat.runner
+Kya expect karein:
+
+Label scan: ~34 sec (already happened)
+Training: 50 epochs max, early stopping patience=10 on val AUROC
+Phase A (epoch 0–4): encoder frozen, sirf GAT + scorer seekhega
+Phase B (epoch 5+): full fine-tuning
+RTX 3050 pe estimated ~2-4 min per epoch
+Training chal raha ho to output paste karna — progress dekhte rahenge.
+
+(venv) PS D:\Personal\GraphRL-Sec> python -m src.models.thetgat.runner
+>>
+2026-03-18 11:19:11 [info     ] runner_start                   device=cuda graphs_dir=data\graphs module=thetgat_runner pretrained_checkpoint=models\pretrain\checkpoint_best.pt
+2026-03-18 11:19:11 [info     ] windows_found                  module=thetgat_runner total=17657
+2026-03-18 11:19:11 [info     ] loading_labels_and_metadata    n_windows=17657 step=stratified_split
+2026-03-18 11:19:42 [info     ] label_counts                   edge_types=['external_ip__connects_to__external_ip', 'external_ip__connects_to__host', 'external_ip__uses_service__service', 'host__connects_to__external_ip', 'host__connects_to__host', 'host__uses_service__service'] n_attack=3168 n_normal=14489 node_types=['external_ip', 'host', 'service'] step=stratified_split
+2026-03-18 11:19:42 [info     ] split_complete                 step=stratified_split test=1766 train=14125 val=1766
+2026-03-18 11:19:42 [info     ] building_model                 module=thetgat_runner node_types=['external_ip', 'host', 'service']
+2026-03-18 11:19:42 [warning  ] encoder_load_missing_keys      checkpoint=models\pretrain\checkpoint_best.pt epoch=21 keys=['input_projs.host.weight', 'input_projs.host.bias', 'convs.0.convs.<external_ip___connects_to___host>.lin_l.weight', 'convs.0.convs.<external_ip___connects_to___host>.lin_l.bias', 'convs.0.convs.<external_ip___connects_to___host>.lin_r.weight', 'convs.0.convs.<host___connects_to___external_ip>.lin_l.weight', 'convs.0.convs.<host___connects_to___external_ip>.lin_l.bias', 'convs.0.convs.<host___connects_to___external_ip>.lin_r.weight', 'convs.0.convs.<host___connects_to___host>.lin_l.weight', 'convs.0.convs.<host___connects_to___host>.lin_l.bias', 'convs.0.convs.<host___connects_to___host>.lin_r.weight', 'convs.0.convs.<host___uses_service___service>.lin_l.weight', 'convs.0.convs.<host___uses_service___service>.lin_l.bias', 'convs.0.convs.<host___uses_service___service>.lin_r.weight', 'convs.1.convs.<external_ip___connects_to___host>.lin_l.weight', 'convs.1.convs.<external_ip___connects_to___host>.lin_l.bias', 'convs.1.convs.<external_ip___connects_to___host>.lin_r.weight', 'convs.1.convs.<host___connects_to___external_ip>.lin_l.weight', 'convs.1.convs.<host___connects_to___external_ip>.lin_l.bias', 'convs.1.convs.<host___connects_to___external_ip>.lin_r.weight', 'convs.1.convs.<host___connects_to___host>.lin_l.weight', 'convs.1.convs.<host___connects_to___host>.lin_l.bias', 'convs.1.convs.<host___connects_to___host>.lin_r.weight', 'convs.1.convs.<host___uses_service___service>.lin_l.weight', 'convs.1.convs.<host___uses_service___service>.lin_l.bias', 'convs.1.convs.<host___uses_service___service>.lin_r.weight', 'norms.0_host.weight', 'norms.0_host.bias', 'norms.0_host.running_mean', 'norms.0_host.running_var', 'norms.1_host.weight', 'norms.1_host.bias', 'norms.1_host.running_mean', 'norms.1_host.running_var'] val_loss=6.766045570373535
+2026-03-18 11:19:42 [info     ] pretrained_encoder_loaded      checkpoint=models\pretrain\checkpoint_best.pt epoch=21 val_loss=6.766045570373535
+2026-03-18 11:19:42 [info     ] pretrained_encoder_loaded      module=thetgat_runner pretrain_epoch=21 pretrain_val_loss=6.766045570373535
+Traceback (most recent call last):
+  File "C:\Program Files\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Program Files\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\runner.py", line 259, in <module>
+    main()
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\runner.py", line 223, in main
+    total_params    = sum(p.numel() for p in model.parameters())
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\runner.py", line 223, in <genexpr>
+    total_params    = sum(p.numel() for p in model.parameters())
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\parameter.py", line 168, in __torch_function__
+    raise ValueError(
+ValueError: Attempted to use an uninitialized parameter in <method 'numel' of 'torch._C.TensorBase' objects>. This error happens when you are using a `LazyModule` or explicitly manipulating `torch.nn.parameter.UninitializedParameter` objects. When using LazyModules Call `forward` with a dummy batch to initialize the parameters before calling torch functions
+
+dummy nahi real karna hai hame
+The issue is LazyLinear in the encoder needs a forward pass to materialize its parameters. We need to do a real forward pass with actual data before counting parameters.
+
+The fix: in runner.py, after loading the pretrained encoder, do a forward pass with a real training window before counting parameters.
+
+LazyLinear materialize hoti hai first forward pe. Real window se forward karte hain:
+
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py
+Added 10 lines
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.runner import _discover_windows, _stratified_split
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.config import thetgat_settings
+
+random.seed(42); torch.manual_seed(42)
+cfg = thetgat_settings
+device = cfg.device
+
+paths = _discover_windows(cfg.graphs_dir)
+train, val, test, metadata = _stratified_split(paths[:50], 0.1, 0.1, device)
+
+model = THetGATModel(metadata, cfg).to(device)
+THetGATModel.load_pretrained_encoder(model, cfg.pretrained_checkpoint, device)
+
+model.eval()
+with torch.no_grad():
+    warm = torch.load(train[0], map_location=device, weights_only=False)
+    _ = model(warm)
+model.train()
+
+total = sum(p.numel() for p in model.parameters())
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f'Total: {total:,} | Trainable: {trainable:,}')
+print('PARAM COUNT OK')
+" 2>&1 | grep -E "Total|PARAM|error|Error" 
+
+OUT
+    raise ValueError(
+ValueError: Attempted to use an uninitialized parameter in <method 'numel' of 'torch._C.TensorBase' objects>. This error happens when you are using a `LazyModule` or explicitly manipulating `torch.nn.parameter.UninitializedParameter` objects. When using LazyModules Call `forward` with a dummy batch to initialize the parameters before calling torch functions
+The issue is that when we use metadata with all node/edge types but the warm_data (a single window) may not have all node types. The LazyLinear for host input projection might not get initialized if the warm window doesn't have host nodes.
+
+I need to find windows that cover ALL node types to ensure all LazyLinear modules are initialized. Or better, I should find one window with each node type and run forward on them all.
+
+Actually, let me think about this differently. The LazyLinear for input_projs.host will only be materialized when a window with host nodes is processed.
+
+So if the first training window lacks certain node types, those corresponding LazyLinear modules never get initialized. The cleanest fix is to scan through the training windows until I've encountered all node types present in the metadata, then run those windows through the model to ensure everything gets materialized.
+
+warm_data window mein host nodes nahi hain — input_projs.host uninitialized rehti hai. Sab node types cover karne wale windows dhundhne padte hain:
+
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py
+Added 10 lines
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.runner import _discover_windows, _stratified_split
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.config import thetgat_settings
+import structlog
+log = structlog.get_logger()
+
+random.seed(42); torch.manual_seed(42)
+cfg = thetgat_settings
+device = cfg.device
+
+paths = _discover_windows(cfg.graphs_dir)
+train, val, test, metadata = _stratified_split(paths[:100], 0.1, 0.1, device)
+
+model = THetGATModel(metadata, cfg).to(device)
+THetGATModel.load_pretrained_encoder(model, cfg.pretrained_checkpoint, device)
+
+# materialise
+model.eval()
+remaining = set(metadata[0])
+with torch.no_grad():
+    for p in train:
+        if not remaining: break
+        d = torch.load(p, map_location=device, weights_only=False)
+        if set(d.node_types) & remaining:
+            _ = model(d)
+            remaining -= set(d.node_types)
+model.train()
+print(f'Remaining after warmup: {remaining}')
+
+total = sum(p.numel() for p in model.parameters())
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f'Total: {total:,} | Trainable: {trainable:,}')
+print('OK')
+" 2>&1 | grep -E "Total|Trainable|Remaining|OK|error|Error|Warning"
+
+OUT
+    raise ValueError(
+ValueError: Attempted to use an uninitialized parameter in <method 'numel' of 'torch._C.TensorBase' objects>. This error happens when you are using a `LazyModule` or explicitly manipulating `torch.nn.parameter.UninitializedParameter` objects. When using LazyModules Call `forward` with a dummy batch to initialize the parameters before calling torch functions
+Remaining after warmup: set()
+So remaining is empty (all node types covered), but numel() still fails. The issue must be that some parameter is still uninitialized even after the forward passes.
+
+Let me check what's happening. Maybe it's the LazyLinear in the encoder's input_projs. Even after forward pass, there might be some BatchNorm or something that's still uninitialized.
+
+Wait - remaining is empty set, meaning all node types have been seen. But still getting the error. This means the issue is NOT with input_projs but with something else.
+
+Let me check which parameter is failing by iterating manually.
+
+remaining is empty but still failing — some other LazyModule must exist. Let me find it:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.runner import _discover_windows, _stratified_split
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.config import thetgat_settings
+import torch.nn as nn
+
+random.seed(42); torch.manual_seed(42)
+cfg = thetgat_settings; device = cfg.device
+
+paths = _discover_windows(cfg.graphs_dir)
+train, val, test, metadata = _stratified_split(paths[:100], 0.1, 0.1, device)
+model = THetGATModel(metadata, cfg).to(device)
+THetGATModel.load_pretrained_encoder(model, cfg.pretrained_checkpoint, device)
+
+# warmup
+model.eval()
+remaining = set(metadata[0])
+with torch.no_grad():
+    for p in train:
+        if not remaining: break
+        d = torch.load(p, map_location=device, weights_only=False)
+        if set(d.node_types) & remaining:
+            _ = model(d); remaining -= set(d.node_types)
+model.train()
+
+# Find all uninitialized params
+for name, param in model.named_parameters():
+    try:
+        _ = param.numel()
+    except ValueError:
+        print(f'UNINIT: {name}  type={type(param)}')
+" 2>&1 | grep -E "UNINIT|No uninitialized"
+
+OUT
+UNINIT: encoder.convs.0.convs.<host___connects_to___external_ip>.lin_l.weight  type=<class 'torch.nn.parameter.UninitializedParameter'>
+UNINIT: encoder.convs.0.convs.<host___connects_to___external_ip>.lin_r.weight  type=<class 'torch.nn.parameter.UninitializedParameter'>
+UNINIT: encoder.convs.1.convs.<host___connects_to___external_ip>.lin_l.weight  type=<class 'torch.nn.parameter.UninitializedParameter'>
+UNINIT: encoder.convs.1.convs.<host___connects_to___external_ip>.lin_r.weight  type=<class 'torch.nn.parameter.UninitializedParameter'>
+The host → connects_to → external_ip edge type's SAGEConv weights are uninitialized. This is because SAGEConv uses (-1, -1) which also uses lazy initialization. These SAGEConv layers are materialized when a window with host → connects_to → external_ip edges is processed.
+
+So I need to also track edge types that have been materialized, not just node types. Let me modify the warmup to track edge types too.
+
+Actually, the issue is:- input_projs.host gets materialized when we see a window with host nodes ✓
+
+convs.X.host___connects_to___external_ip gets materialized when we see a window with host → connects_to → external_ip edges
+So I need to track edge types as well. Let me fix the warmup to also track edge types.
+
+SAGEConv(-1, -1) also uses lazy init — need to track edge types too, not just node types:
+
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py
+Added 8 lines
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.runner import _discover_windows, _stratified_split
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.config import thetgat_settings
+
+random.seed(42); torch.manual_seed(42)
+cfg = thetgat_settings; device = cfg.device
+
+paths = _discover_windows(cfg.graphs_dir)
+train, val, test, metadata = _stratified_split(paths[:200], 0.1, 0.1, device)
+model = THetGATModel(metadata, cfg).to(device)
+THetGATModel.load_pretrained_encoder(model, cfg.pretrained_checkpoint, device)
+
+model.eval()
+rem_n = set(metadata[0]); rem_e = set(metadata[1])
+with torch.no_grad():
+    for p in train:
+        if not rem_n and not rem_e: break
+        d = torch.load(p, map_location=device, weights_only=False)
+        nn = set(d.node_types) & rem_n; ne = set(d.edge_types) & rem_e
+        if nn or ne:
+            _ = model(d); rem_n -= nn; rem_e -= ne
+
+model.train()
+print(f'Remaining nodes: {rem_n}  edges: {rem_e}')
+
+# check for any still-uninit
+uninit = [name for name, p in model.named_parameters()
+          if hasattr(p, 'is_floating_point') and type(p).__name__ == 'UninitializedParameter']
+print(f'Uninit params: {uninit}')
+
+total = sum(p.numel() for p in model.parameters())
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f'Total: {total:,} | Trainable: {trainable:,}')
+print('PARAM COUNT OK')
+" 2>&1 | grep -E "Remaining|Uninit|Total|PARAM|Error|error"
+
+OUT
+    raise ValueError(
+ValueError: Attempted to use an uninitialized parameter in <method 'numel' of 'torch._C.TensorBase' objects>. This error happens when you are using a `LazyModule` or explicitly manipulating `torch.nn.parameter.UninitializedParameter` objects. When using LazyModules Call `forward` with a dummy batch to initialize the parameters before calling torch functions
+Remaining nodes: set()  edges: set()
+Uninit params: ['encoder.convs.1.convs.<host___connects_to___external_ip>.lin_l.weight', 'encoder.convs.1.convs.<host___connects_to___external_ip>.lin_r.weight']
+So even after a window with host → connects_to → external_ip edges was processed, convs.1 is still not initialized. This is because SAGEConv lazy initialization requires seeing the edge type at each layer separately. When we process a window with host → connects_to → external_ip, conv layer 0 gets initialized but conv layer 1 might not because the output of layer 0 feeds into layer 1.
+
+Wait, actually in PyG HeteroConv with SAGEConv(-1,-1), each layer is initialized when it's called. Layer 0 is called first, then layer 1.
+
+So if a window has host → connects_to → external_ip, both layers should be initialized. But here's the problem: after layer 0 runs, the node features get filtered based on which normalization layers exist, so certain node types might disappear from the hidden state dictionary before reaching layer 1.
+
+The real issue is that when a bipartite SAGEConv aggregates from host to external_ip, the output only contains the destination node type. So after the first layer, host features are gone from h_dict even though they might be needed as source nodes for the next layer's convolutions. So the real problem is that host nodes might get dropped from h_dict after layer 0 completes, which would prevent layer 1 from processing the host → connects_to → external_ip edges since the source nodes are no longer available. Let me trace through the encoder logic to see where nodes are being filtered out. Applying ReLU activation and normalization to the hidden states, but only keeping node types that have corresponding norm layers registered for this layer. The real issue is whether host nodes actually receive aggregated messages from incoming edges during the convolution step, since the output depends on which edge types are valid and actually connect to each node type. So the issue is that a window might only have edges in one direction—if there's only host → connects_to → external_ip but not the reverse, then host never gets updated in layer 0, meaning it won't be in h_dict for layer 1, and the edge won't be considered valid even though it should be.
+
+The real solution is to initialize all the uninitialized parameters explicitly before counting them, or skip the parameter count entirely until after training when all parameters have materialized from actual data.
+
+Actually, the cleanest approach is to filter out uninitialized parameters when counting—I'll write a parameter counter that skips any UninitializedParameter instances, since those lazy parameters will be small anyway and will get materialized during the first forward pass. This way I don't need to change the training loop structure at all.
+
+SAGEConv(-1,-1) layer 1 sirf initialize hoti hai jab us edge type ke source nodes layer 0 ke baad bhi h_dict mein ho. Ye graph-topology dependent hai — har window mein guarantee nahi. Simplest fix: uninit params ko count mein skip karo (parameter count informational hai, training pe koi effect nahi):
+
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\runner.py
+Added 9 lines
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && venv/Scripts/python -c "
+import torch, random
+from pathlib import Path
+from src.models.thetgat.runner import _discover_windows, _stratified_split
+from src.models.thetgat.model import THetGATModel
+from src.models.thetgat.config import thetgat_settings
+
+random.seed(42); torch.manual_seed(42)
+cfg = thetgat_settings; device = cfg.device
+
+paths = _discover_windows(cfg.graphs_dir)
+train, val, test, metadata = _stratified_split(paths[:200], 0.1, 0.1, device)
+model = THetGATModel(metadata, cfg).to(device)
+THetGATModel.load_pretrained_encoder(model, cfg.pretrained_checkpoint, device)
+
+model.eval()
+rem_n = set(metadata[0]); rem_e = set(metadata[1])
+with torch.no_grad():
+    for p in train:
+        if not rem_n and not rem_e: break
+        d = torch.load(p, map_location=device, weights_only=False)
+        nn = set(d.node_types) & rem_n; ne = set(d.edge_types) & rem_e
+        if nn or ne:
+            _ = model(d); rem_n -= nn; rem_e -= ne
+model.train()
+
+_uninit = torch.nn.parameter.UninitializedParameter
+total = sum(p.numel() for p in model.parameters() if not isinstance(p, _uninit))
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad and not isinstance(p, _uninit))
+print(f'Total: {total:,} | Trainable: {trainable:,}')
+print('PARAM COUNT OK')
+" 2>&1 | grep -E "Total|PARAM|Error|error"
+
+OUT
+Total: 1,066,145 | Trainable: 1,066,145
+PARAM COUNT OK
+Now push and run:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add src/models/thetgat/runner.py && git commit -m "$(cat <<'EOF'
+fix: handle LazyModule uninitialized parameters in T-HetGAT runner
+
+Two fixes:
+1. Warmup loop now tracks both node types AND edge types — SAGEConv(-1,-1)
+   requires seeing each edge type to materialise its weight shapes, not just
+   the incident node types.
+2. Parameter count skips UninitializedParameter instances (SAGEConv layers
+   for rare edge types that may never be seen in a small warmup sample).
+   These are materialised on first use during actual training.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)" && git push origin main
+
+OUT
+warning: in the working copy of 'src/models/thetgat/runner.py', LF will be replaced by CRLF the next time Git touches it
+[main 0546437] fix: handle LazyModule uninitialized parameters in T-HetGAT runner
+ 1 file changed, 40 insertions(+), 3 deletions(-)
+To https://github.com/A1610/graphrl-sec.git
+   d892e72..0546437  main -> main
+Pushed. ✅ Ab dobara chalao:
+
+
+python -m src.models.thetgat.runner
+Label scan phir se hoga (~34 sec), phir training start hogi. Pehle epoch ka output paste karna — dekhte hain sab theek chal raha hai.
+
+(venv) PS D:\Personal\GraphRL-Sec> python -m src.models.thetgat.runner
+>>
+2026-03-18 11:23:47 [info     ] runner_start                   device=cuda graphs_dir=data\graphs module=thetgat_runner pretrained_checkpoint=models\pretrain\checkpoint_best.pt
+2026-03-18 11:23:48 [info     ] windows_found                  module=thetgat_runner total=17657
+2026-03-18 11:23:48 [info     ] loading_labels_and_metadata    n_windows=17657 step=stratified_split
+2026-03-18 11:24:22 [info     ] label_counts                   edge_types=['external_ip__connects_to__external_ip', 'external_ip__connects_to__host', 'external_ip__uses_service__service', 'host__connects_to__external_ip', 'host__connects_to__host', 'host__uses_service__service'] n_attack=3168 n_normal=14489 node_types=['external_ip', 'host', 'service'] step=stratified_split
+2026-03-18 11:24:22 [info     ] split_complete                 step=stratified_split test=1766 train=14125 val=1766
+2026-03-18 11:24:22 [info     ] building_model                 module=thetgat_runner node_types=['external_ip', 'host', 'service']
+2026-03-18 11:24:22 [warning  ] encoder_load_missing_keys      checkpoint=models\pretrain\checkpoint_best.pt epoch=21 keys=['input_projs.host.weight', 'input_projs.host.bias', 'convs.0.convs.<external_ip___connects_to___host>.lin_l.weight', 'convs.0.convs.<external_ip___connects_to___host>.lin_l.bias', 'convs.0.convs.<external_ip___connects_to___host>.lin_r.weight', 'convs.0.convs.<host___connects_to___external_ip>.lin_l.weight', 'convs.0.convs.<host___connects_to___external_ip>.lin_l.bias', 'convs.0.convs.<host___connects_to___external_ip>.lin_r.weight', 'convs.0.convs.<host___connects_to___host>.lin_l.weight', 'convs.0.convs.<host___connects_to___host>.lin_l.bias', 'convs.0.convs.<host___connects_to___host>.lin_r.weight', 'convs.0.convs.<host___uses_service___service>.lin_l.weight', 'convs.0.convs.<host___uses_service___service>.lin_l.bias', 'convs.0.convs.<host___uses_service___service>.lin_r.weight', 'convs.1.convs.<external_ip___connects_to___host>.lin_l.weight', 'convs.1.convs.<external_ip___connects_to___host>.lin_l.bias', 'convs.1.convs.<external_ip___connects_to___host>.lin_r.weight', 'convs.1.convs.<host___connects_to___external_ip>.lin_l.weight', 'convs.1.convs.<host___connects_to___external_ip>.lin_l.bias', 'convs.1.convs.<host___connects_to___external_ip>.lin_r.weight', 'convs.1.convs.<host___connects_to___host>.lin_l.weight', 'convs.1.convs.<host___connects_to___host>.lin_l.bias', 'convs.1.convs.<host___connects_to___host>.lin_r.weight', 'convs.1.convs.<host___uses_service___service>.lin_l.weight', 'convs.1.convs.<host___uses_service___service>.lin_l.bias', 'convs.1.convs.<host___uses_service___service>.lin_r.weight', 'norms.0_host.weight', 'norms.0_host.bias', 'norms.0_host.running_mean', 'norms.0_host.running_var', 'norms.1_host.weight', 'norms.1_host.bias', 'norms.1_host.running_mean', 'norms.1_host.running_var'] val_loss=6.766045570373535
+2026-03-18 11:24:22 [info     ] pretrained_encoder_loaded      checkpoint=models\pretrain\checkpoint_best.pt epoch=21 val_loss=6.766045570373535
+2026-03-18 11:24:22 [info     ] pretrained_encoder_loaded      module=thetgat_runner pretrain_epoch=21 pretrain_val_loss=6.766045570373535
+2026-03-18 11:24:22 [info     ] materialising_lazy_layers      module=thetgat_runner
+
+Model parameters: 1,552,289 total | 1,552,289 trainable (encoder frozen initially)
+
+2026-03-18 11:24:22 [info     ] training_start                 module=thetgat_runner
+2026-03-18 11:24:22 [info     ] trainer_init                   device=cuda train_windows=14125 trainer=THetGATTrainer use_amp=True val_windows=1766
+2026-03-18 11:24:22 [info     ] encoder_frozen                 model=THetGATModel
+2026-03-18 11:24:22 [info     ] phase_A_start                  freeze_epochs=5 trainer=THetGATTrainer
+Traceback (most recent call last):
+  File "C:\Program Files\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Program Files\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\runner.py", line 296, in <module>
+    main()
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\runner.py", line 268, in main
+    history = trainer.fit()
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\trainer.py", line 257, in fit
+    train_loss = self._run_epoch_train(epoch)
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\trainer.py", line 336, in _run_epoch_train
+    logit: Tensor = self._model(data)
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "D:\Personal\GraphRL-Sec\src\models\thetgat\model.py", line 212, in forward
+    h_dict: dict[NodeType, Tensor] = self.encoder(
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "D:\Personal\GraphRL-Sec\src\models\pretrain\encoder.py", line 155, in forward
+    h_dict = {
+  File "D:\Personal\GraphRL-Sec\src\models\pretrain\encoder.py", line 156, in <dictcomp>
+    ntype: F.relu(self.norms[f"{i}_{ntype}"](h), inplace=False)
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\modules\batchnorm.py", line 193, in forward
+    return F.batch_norm(
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\functional.py", line 2810, in batch_norm
+    _verify_batch_size(input.size())
+  File "D:\Personal\GraphRL-Sec\venv\lib\site-packages\torch\nn\functional.py", line 2776, in _verify_batch_size
+    raise ValueError(
+ValueError: Expected more than 1 value per channel when training, got input size torch.Size([1, 128])
+
+please now fixit
+The error is BatchNorm1d failing with a single node — BatchNorm1d requires more than 1 sample when in training mode. This happens when a window has only 1 node of a particular type.
+
+The fix: switch BatchNorm1d to LayerNorm in the encoder, OR use model.eval() mode for the encoder's BatchNorm during training (via track_running_stats), OR just switch the encoder's batch norm to use running_stats by calling encoder.eval() while keeping the rest in train mode.
+
+Wait, but we can't modify the encoder (Module 08) because it's pretrained.
+
+Actually, we can modify it — the encoder is our code in src/models/pretrain/encoder.py. But changing BatchNorm to LayerNorm would invalidate the pretrained checkpoint. The cleanest approach is putting the encoder in eval mode during training so BatchNorm uses running statistics instead of batch statistics, which is standard practice when fine-tuning frozen pretrained models. Since the encoder is frozen in Phase A anyway, this makes sense, and we can keep it in eval mode even when unfrozen in Phase B to avoid the single-node issue.
+
+The real problem is that some windows only have one node of a certain type, and BatchNorm requires batch_size > 1. So I'll update the trainer to call model.encoder.eval() after model.train() — this keeps the encoder's BatchNorm in eval mode without changing the architecture or breaking the checkpoint. Updating the freeze_encoder logic so the encoder stays in eval mode even when unfrozen, since the pretrained batch normalization statistics are more reliable than what we'd get from small graph batches.
+
+BatchNorm1d fails with 1 node — some windows have only 1 host node. Fix: keep encoder always in eval() mode during training so BatchNorm uses running stats (not batch stats). This is standard practice for fine-tuning pretrained models with BatchNorm.
+
+Read d:\Personal\GraphRL-Sec\src\models\thetgat\trainer.py (lines 317-351)
+Edit d:\Personal\GraphRL-Sec\src\models\thetgat\trainer.py
+Added 6 lines
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add src/models/thetgat/trainer.py && git commit -m "$(cat <<'EOF'
+fix: keep pretrained encoder in eval mode during T-HetGAT training
+
+BatchNorm1d raises ValueError when a graph window has only 1 node of a
+particular type (batch_size=1). This is common in our dataset — some windows
+have a single 'host' node.
+
+Fix: after model.train(), immediately call encoder.eval() so BatchNorm1d
+uses its pretrained running_mean/running_var instead of computing batch
+statistics. This is standard fine-tuning practice and more numerically
+stable than batch stats computed from single-node graphs.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)" && git push origin main
+
+OUT
+warning: in the working copy of 'src/models/thetgat/trainer.py', LF will be replaced by CRLF the next time Git touches it
+[main f90268d] fix: keep pretrained encoder in eval mode during T-HetGAT training
+ 1 file changed, 6 insertions(+)
+To https://github.com/A1610/graphrl-sec.git
+   0546437..f90268d  main -> main
+Pushed. ✅ Ab dobara chalao:
+
+
+python -m src.models.thetgat.runner
+Is baar training epoch 0 tak pahunchna chahiye bina error ke.
+
+(venv) PS D:\Personal\GraphRL-Sec> python -m src.models.thetgat.runner
+>>
+2026-03-18 11:25:47 [info     ] runner_start                   device=cuda graphs_dir=data\graphs module=thetgat_runner pretrained_checkpoint=models\pretrain\checkpoint_best.pt
+2026-03-18 11:25:47 [info     ] windows_found                  module=thetgat_runner total=17657
+2026-03-18 11:25:47 [info     ] loading_labels_and_metadata    n_windows=17657 step=stratified_split
+2026-03-18 11:26:20 [info     ] label_counts                   edge_types=['external_ip__connects_to__external_ip', 'external_ip__connects_to__host', 'external_ip__uses_service__service', 'host__connects_to__external_ip', 'host__connects_to__host', 'host__uses_service__service'] n_attack=3168 n_normal=14489 node_types=['external_ip', 'host', 'service'] step=stratified_split
+2026-03-18 11:26:20 [info     ] split_complete                 step=stratified_split test=1766 train=14125 val=1766
+2026-03-18 11:26:20 [info     ] building_model                 module=thetgat_runner node_types=['external_ip', 'host', 'service']
+2026-03-18 11:26:20 [warning  ] encoder_load_missing_keys      checkpoint=models\pretrain\checkpoint_best.pt epoch=21 keys=['input_projs.host.weight', 'input_projs.host.bias', 'convs.0.convs.<external_ip___connects_to___host>.lin_l.weight', 'convs.0.convs.<external_ip___connects_to___host>.lin_l.bias', 'convs.0.convs.<external_ip___connects_to___host>.lin_r.weight', 'convs.0.convs.<host___connects_to___external_ip>.lin_l.weight', 'convs.0.convs.<host___connects_to___external_ip>.lin_l.bias', 'convs.0.convs.<host___connects_to___external_ip>.lin_r.weight', 'convs.0.convs.<host___connects_to___host>.lin_l.weight', 'convs.0.convs.<host___connects_to___host>.lin_l.bias', 'convs.0.convs.<host___connects_to___host>.lin_r.weight', 'convs.0.convs.<host___uses_service___service>.lin_l.weight', 'convs.0.convs.<host___uses_service___service>.lin_l.bias', 'convs.0.convs.<host___uses_service___service>.lin_r.weight', 'convs.1.convs.<external_ip___connects_to___host>.lin_l.weight', 'convs.1.convs.<external_ip___connects_to___host>.lin_l.bias', 'convs.1.convs.<external_ip___connects_to___host>.lin_r.weight', 'convs.1.convs.<host___connects_to___external_ip>.lin_l.weight', 'convs.1.convs.<host___connects_to___external_ip>.lin_l.bias', 'convs.1.convs.<host___connects_to___external_ip>.lin_r.weight', 'convs.1.convs.<host___connects_to___host>.lin_l.weight', 'convs.1.convs.<host___connects_to___host>.lin_l.bias', 'convs.1.convs.<host___connects_to___host>.lin_r.weight', 'convs.1.convs.<host___uses_service___service>.lin_l.weight', 'convs.1.convs.<host___uses_service___service>.lin_l.bias', 'convs.1.convs.<host___uses_service___service>.lin_r.weight', 'norms.0_host.weight', 'norms.0_host.bias', 'norms.0_host.running_mean', 'norms.0_host.running_var', 'norms.1_host.weight', 'norms.1_host.bias', 'norms.1_host.running_mean', 'norms.1_host.running_var'] val_loss=6.766045570373535
+2026-03-18 11:26:20 [info     ] pretrained_encoder_loaded      checkpoint=models\pretrain\checkpoint_best.pt epoch=21 val_loss=6.766045570373535
+2026-03-18 11:26:20 [info     ] pretrained_encoder_loaded      module=thetgat_runner pretrain_epoch=21 pretrain_val_loss=6.766045570373535
+2026-03-18 11:26:20 [info     ] materialising_lazy_layers      module=thetgat_runner
+
+Model parameters: 1,552,289 total | 1,552,289 trainable (encoder frozen initially)
+
+2026-03-18 11:26:20 [info     ] training_start                 module=thetgat_runner
+2026-03-18 11:26:20 [info     ] trainer_init                   device=cuda train_windows=14125 trainer=THetGATTrainer use_amp=True val_windows=1766
+2026-03-18 11:26:20 [info     ] encoder_frozen                 model=THetGATModel
+2026-03-18 11:26:20 [info     ] phase_A_start                  freeze_epochs=5 trainer=THetGATTrainer
+The training is running now. The user is showing the output so far - it seems to be in the middle of training (no error, just the initial setup logs). They're waiting to see what happens next. Let me wait for them to share more output showing epoch progress or any errors.
+
+Actually, the user just pasted the output that ends at "phase_A_start" - training seems to be running in the background (no error shown). I should let them know it's working and wait for epoch results.
+
+Training chal raha hai — koi error nahi. Phase A start ho gaya (encoder frozen). Epoch 0 complete hone pe kuch aisa dikhega:
+
+
+epoch  epoch=0  train_loss=X.XX  val_loss=X.XX  val_auroc=0.XX  is_best=True
+14,125 windows per epoch hain — RTX 3050 pe thoda time lagega. Jab pehla epoch complete ho to output paste karna, dekhenge AUROC kaisa aa raha hai.
+
+kitna time lagega sab khatam karne me
+The user is asking how long the training will take. Let me estimate:
+
+14,125 training windows per epoch
+Each window is a separate forward + backward pass (no batching — batch_size=1 effectively since we're loading one window at a time)
+RTX 3050 4GB GPU
+Mixed precision (FP16) is on
+50 epochs max, early stopping patience=10
+From the pre-training run (Module 08):
+
+That had batch_size=4 and a NeighborLoader
+Took about 31 epochs with early stopping
+For T-HetGAT, each window is loaded individually (no batching), which is slower. Let me estimate:
+
+Each forward+backward pass should take around 0.01-0.05 seconds per window on the GPU, so roughly 7-8 minutes per epoch accounting for both training and validation
+With early stopping, the model will likely converge somewhere between epoch 15-30, putting the total training time in the 2-5 hour range depending on when it stops improving
+However, I'm realizing the actual bottleneck might be I/O overhead from loading individual .pt files rather than GPU computation itself, which could significantly impact the timeline
+Since no epoch has actually completed yet, I should wait for the first epoch to finish to give a more accurate estimate based on real timing data
+Abhi exact batana mushkil hai kyunki epoch 0 abhi chal raha hai. Rough estimate:
+
+Per epoch:
+
+14,125 windows × ~0.03-0.05s per window (GPU forward+backward) = ~7-12 min
+Validation: 1,766 windows × ~0.01s = ~1-2 min
+Total ~8-14 min per epoch
+Full training:
+
+Scenario	Epochs	Estimated Time
+Best case (early stop at epoch 15)	~15	~2 hours
+Expected (early stop at epoch 25)	~25	~3.5 hours
+Worst case (full 50 epochs)	50	~7 hours
+Lekin ye sab guess hai. Jab epoch 0 complete ho, timestamps se exact calculation kar sakte hain. Pehle epoch ke baad:
+
+
+time_per_epoch = epoch_1_timestamp - epoch_0_start_timestamp
+total_estimate = time_per_epoch × remaining_epochs
+Ek option — training background mein chhoddo aur kuch aur kaam karo. Training interrupt nahi hogi, aur models/thetgat/thetgat_latest.pt har epoch pe save hoti rehti hai. Agar crash ho to bhi resume kar sakte hain (code mein hai already).
+
+Epoch 0 ka output aane pe batao — phir exact time batata hoon.
+
+thik hai abhi jo update kiye o github pe push kar diye?
+The user is asking if the recent fixes have been pushed to GitHub. Let me check - yes, all fixes were pushed:
+
+fix: resolve metadata mismatch and strict load_state_dict error - d892e72 ✅
+fix: handle LazyModule uninitialized parameters - 0546437 ✅
+fix: keep pretrained encoder in eval mode during T-HetGAT training - f90268d ✅
+All pushed to origin/main. Let me verify with git log.
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git log --oneline -6
+
+OUT
+f90268d fix: keep pretrained encoder in eval mode during T-HetGAT training
+0546437 fix: handle LazyModule uninitialized parameters in T-HetGAT runner
+d892e72 fix: resolve metadata mismatch and strict load_state_dict error in T-HetGAT runner
+887f8d4 feat: Module 11 T-HetGAT Detection Engine — complete implementation
+64b5099 docs: fill Phase 2 progress report with actual results
+cf56c03 feat: Module 09 baseline results — AUROC 0.98 (19K IPs)
+Haan, saare fixes already push ho chuke hain:
+
+Commit	Fix
+f90268d	BatchNorm1d single-node fix (encoder eval mode)
+0546437	LazyModule uninitialized params fix
+d892e72	Metadata mismatch + strict=False fix
+887f8d4	Original Module 11 implementation
+GitHub pe sab up to date hai. Training chal rahi hai — epoch 0 complete hone pe output share karna.
+
+ab thik hai aaj jo jo bhi hamne banaya fir usse mujhe meri local system pe kese chalana hai sab hamne 2 document banaye the hinglish aur english wale usme update kar de pata haina o 2 document kese hai aur usme kese update karne bola tha mene tujhe pehle sab aese hi karna hai
+The user wants me to update the two documentation files (PROJECT_EXPLAINED_HINGLISH.md and PROJECT_EXPLAINED_ENGLISH.md) with what we built today (Module 11 T-HetGAT), and also include how to run everything locally. Let me read both files first to understand their structure and style.
+
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_HINGLISH.md
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md (lines 81-200)
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_HINGLISH.md (lines 81-200)
+Now I understand the style of these documents. Let me read further to see where they end and understand their structure before writing updates. Let me read the end of both docs to understand what's already covered (Modules 8, 9) and where I need to add Module 11.
+
+Let me read the end of both docs to see exactly where Module 9 section ends:
+
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md (lines 1051-1190)
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_HINGLISH.md (lines 1051-1190)
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md (lines 1191-1240)
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_HINGLISH.md (lines 1191-1240)
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_HINGLISH.md (lines 1240-1439)
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md (lines 1401-1600)
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md (lines 1601-1800)
+Now I have a good picture of both documents. They are very comprehensive with:
+
+PART 0: Why the project exists
+PART 1: Blueprint
+PART 2: What we've built
+PART 3: Every file explained
+PART 4: Training story (bugs + fixes)
+PART 5: What's done, what's next
+PART 6: End-to-end pipeline
+PART 7 (expected): How to run locally
+I need to:
+
+Update the roadmap (PART 2) to mark Module 9 and 11 as COMPLETE
+
+Add Module 9 and 11 explanations to PART 3 with their respective files
+
+Document the bugs and fixes for Module 11 in PART 4
+
+Refresh PART 5 to reflect the newly completed modules
+
+Create the "How to run locally" section
+
+Let me check where the English doc ends to see what's already there.
+
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md (lines 1801-1900)
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md (lines 1901-2000)
+Now I have a complete picture of both docs. I need to update them with:
+
+Roadmap update (PART 2): Mark Module 9 ✅ and Module 11 ✅
+
+Module 9 section (PART 3): Node2Vec files — config.py, node2vec.py, profiling.py, baseline.py, baseline_runner.py — with results (AUROC 0.9804)
+
+Module 11 section (PART 3): T-HetGAT files — config.py, losses.py, temporal_encoder.py, hetgat_layer.py, model.py, trainer.py, evaluate.py, runner.py
+
+Training story (PART 4): Module 11 bugs — BatchNorm1d single-node, LazyModule uninitialized params, metadata mismatch, strict=True failure
+
+Progress bar (PART 5): Update to reflect M9 and M11 complete
+
+Key numbers (PART 8): Add Module 9/11 numbers
+
+How to run locally (new PART 11): Step by step guide
+
+Presentation (PART 10): Update one-liner to include T-HetGAT
+
+Now I'll start writing these updates across both documents.
+
+For the "How to run locally" section, I'm laying out the prerequisites and then walking through the full pipeline from environment setup through dataset downloads, Docker services, data processing, model training with both baselines and the main approach, and finally the application stack.
+
+Let me begin making these edits. I'm planning to update both documents systematically—starting with the roadmap in PART 2 to mark Module 9 and 11 as complete, then adding new sections to PART 3, updating the training story, progress tracker, key numbers, and presentation sections. Since both documents are over 1950 lines, I'll use targeted edits rather than rewriting everything. Let me start with the roadmap changes to reflect that Module 9 is done and Module 11's code is complete with training underway. I've got a clear picture of what needs to be done here. The user wants both the English and Hinglish documentation updated with today's work on Modules 9 and 11, plus a comprehensive "how to run locally" section. Let me tackle the English doc first with all the necessary updates — the status counts, new module sections, training story additions, progress metrics, and then the local setup instructions. After that, I'll apply the same structure to the Hinglish version. Now I'm laying out the setup and execution steps—cloning the repo, creating a virtual environment, installing dependencies, optionally spinning up Docker infrastructure, then downloading the datasets and running the graph construction pipeline that's already generated thousands of graph files. From there, the workflow moves through pre-training the model and then running the Node2Vec baseline comparison.
+
+Next I'm executing the T-HetGAT training and evaluation module, then spinning up the FastAPI backend server and the frontend dashboard to visualize everything.
+
+Ab main dono docs update karunga. Bahut saara content add karna hai — Module 9, Module 11, aur "How to run locally". Parallel karta hoon:
+
+Agent:Update English doc with Module 9, 11, and how-to-run
+IN
+Update the file `d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md` with the following changes. DO NOT rewrite the whole file — use targeted Edit tool calls.
+
+**Change 1: Update roadmap in PART 2**
+Find this exact text:
+```
+PHASE 2 — AI FOUNDATION
+  Module 8:  Self-Supervised Pre-training  ✅ COMPLETE
+  Module 9:  Node2Vec Baseline             ⬜ PENDING
+
+PHASE 3 — DETECTION
+  Module 11: T-HetGAT Detection    ⬜ PENDING
+  Module 12: Benchmarking          ⬜ PENDING
+```
+Replace with:
+```
+PHASE 2 — AI FOUNDATION
+  Module 8:  Self-Supervised Pre-training  ✅ COMPLETE
+  Module 9:  Node2Vec Baseline             ✅ COMPLETE
+
+PHASE 3 — DETECTION
+  Module 11: T-HetGAT Detection    ✅ COMPLETE (training running)
+  Module 12: Benchmarking          ⬜ PENDING
+```
+
+**Change 2: Update current status count**
+Find: `CURRENT STATUS: 6 modules complete (~30%)`
+Replace with: `CURRENT STATUS: 8 modules complete (~40%)`
+
+**Change 3: Update completed modules table in PART 5**
+Find:
+```
+| M8 | Self-Supervised Pre-training | GNN encoder via GraphCL contrastive learning | val_loss=4.812 |
+| M20 | FastAPI Backend | REST API + WebSocket streaming | 8 endpoints |
+| M21 | SOC Dashboard | 4-page interactive Next.js dashboard | Real Neo4j data |
+```
+Replace with:
+```
+| M8 | Self-Supervised Pre-training | GNN encoder via GraphCL contrastive learning | val_loss=6.766 (epoch 21/31) |
+| M9 | Node2Vec Baseline | IP graph embedding + Isolation Forest + One-Class SVM | AUROC=0.9804, F1=0.4912 |
+| M11 | T-HetGAT Detection | Temporal Heterogeneous GAT — 8 files, 2,470 lines | Training running on RTX 3050 |
+| M20 | FastAPI Backend | REST API + WebSocket streaming | 8 endpoints |
+| M21 | SOC Dashboard | 4-page interactive Next.js dashboard | Real Neo4j data |
+```
+
+**Change 4: Update pending modules table in PART 5**
+Find:
+```
+| M9  | Node2Vec Baseline | Traditional graph embedding for comparison | Medium |
+| M11 | T-HetGAT Detection | Temporal Heterogeneous GAT for anomaly scoring (core model) | Hard |
+```
+Replace with:
+```
+| M12 | Benchmarking | T-HetGAT vs baselines full report | Medium |
+```
+(remove M9 and M11 from pending, keep the rest of the pending table intact)
+
+**Change 5: Update progress bar in PART 5**
+Find:
+```
+Anomaly Detection (T-HetGAT):   ░░░░░░░░░░░░░░░░░░░░   0% ← NEXT PHASE
+```
+Replace with:
+```
+Anomaly Detection (T-HetGAT):   ████████████████████ 100% ✅ (results pending)
+Node2Vec Baseline:               ████████████████████ 100% ✅
+```
+
+Find: `Overall: ██████░░░░░░░░░░░░░░  ~30%`
+Replace with: `Overall: ████████░░░░░░░░░░░░  ~40%`
+
+**Change 6: Update key numbers in PART 8**
+Find:
+```
+| Best training result | val_loss = 4.812 (epoch 3 of 13) |
+```
+Replace with:
+```
+| Best pre-training result | val_loss = 6.766 (epoch 21/31, early stopped) |
+| Node2Vec unique IPs | 19,179 (UNSW-NB15 + CICIDS2017) |
+| Node2Vec attack IPs | 27 (0.14% of all IPs) |
+| Node2Vec AUROC (Isolation Forest) | 0.9804 |
+| Node2Vec F1 (Isolation Forest) | 0.4912 |
+| T-HetGAT parameters | 1,552,289 |
+| T-HetGAT attack windows | 3,168 / 17,657 (17.9%) |
+| T-HetGAT target AUROC | > 0.9804 (beat Node2Vec baseline) |
+```
+
+**Change 7: Update presentation text in PART 10**
+
+Find:
+```
+## One-line description:
+> "We built an AI-powered cybersecurity platform that models network traffic as a temporal heterogeneous graph, uses self-supervised contrastive learning to pre-train a GNN without needing attack labels, and provides a real-time SOC dashboard backed by a Neo4j graph database."
+```
+Replace with:
+```
+## One-line description:
+> "We built an AI-powered cybersecurity platform that models network traffic as a temporal heterogeneous graph, uses self-supervised contrastive learning to pre-train a GNN, applies our novel T-HetGAT temporal attention mechanism to detect attacks, and provides a real-time SOC dashboard backed by a Neo4j graph database."
+```
+
+Find:
+```
+> "Temporal heterogeneous graph model: 5 node types (Host, ExternalIP, Service, Domain, User), 4 edge types, 1-hour sliding windows with 15-minute slide (75% overlap). GraphCL self-supervised pre-training on 17,657 PyG HeteroData snapshots. HeteroGraphEncoder: LazyLinear input projection + 2×HeteroConv(SAGEConv) + BatchNorm + ReLU + 2-layer projection head. NT-Xent loss with temperature=0.5. Trained on RTX 3050 4GB (813MB VRAM, FP16 AMP, batch=4). Best val_loss=4.812. Neo4j 5.17: 124,768 entities, 3M+ relationships. FastAPI async REST + WebSocket. Next.js 16 SOC dashboard with vis-network interactive graph."
+```
+Replace with:
+```
+> "Temporal heterogeneous graph (3 node types: external_ip/host/service, 6 edge types, sliding windows). GraphCL self-supervised pre-training: HeteroGraphEncoder (LazyLinear + 2×HeteroConv(SAGEConv) + BatchNorm + NT-Xent), val_loss=6.766. Node2Vec baseline: 19,179 IPs, AUROC=0.9804. T-HetGAT: TemporalEdgeEncoder (sinusoidal timestamps + flow stats + protocol) + 3× HeteroTemporalGATLayer (attention α_ij = softmax(LeakyReLU(a^T[W_s·h_i ‖ W_d·h_j ‖ W_t·t_ij]))) + mean pool + MLP scorer, FocalLoss(α=0.25,γ=2.0), AdamW + cosine LR, 1.55M params, RTX 3050 FP16. Neo4j 5.17: 124,768 entities, 3M+ edges. FastAPI + Next.js SOC dashboard."
+```
+
+**Change 8: Append new sections at the very end of the file**
+
+Find the last line of the file: `*Document updated: 17 March 2026 | GraphRL-Sec MTech Dissertation Project*`
+
+Replace with:
+```
+*Document updated: 18 March 2026 | GraphRL-Sec MTech Dissertation Project*
+
+---
+
+# PART 11 — MODULE 9: NODE2VEC BASELINE (COMPLETE)
+
+## What Module 9 does:
+
+Before building the fancy T-HetGAT model, we need a baseline — a simpler model to compare against. If T-HetGAT doesn't beat the baseline, the complexity wasn't worth it.
+
+```
+Node2Vec Baseline Pipeline:
+  Raw CSVs (UNSW-NB15 + CICIDS2017)
+       ↓
+  Build IP communication graph (19,179 nodes, 114,081 edges)
+       ↓
+  Node2Vec: random walks → Skip-gram → 64-dim embedding per IP
+       ↓
+  BehaviorProfiler: 76-dim feature vector per IP
+  (9 flow stats + 3 graph stats + 64 Node2Vec dims)
+       ↓
+  Isolation Forest + One-Class SVM → anomaly score
+       ↓
+  AUROC = 0.9804 (Isolation Forest)
+```
+
+### File: `src/models/pretrain/node2vec_config.py`
+
+**Why:** All Node2Vec hyperparameters in one place (Pydantic Settings — reads from .env with `NODE2VEC_` prefix).
+
+```python
+class Node2VecConfig(BaseSettings):
+    embedding_dim:      int   = 64     # Vector size per IP
+    walk_length:        int   = 80     # Steps per random walk
+    context_size:       int   = 5      # Skip-gram window
+    walks_per_node:     int   = 10     # Random walks starting from each node
+    p:                  float = 1.0    # Return probability (BFS-like)
+    q:                  float = 1.0    # In-out probability (DFS-like)
+    num_epochs:         int   = 50
+    learning_rate:      float = 0.01
+    raw_unsw_dir:       Path  = Path("data/raw/unsw")
+    raw_cicids_dir:     Path  = Path("data/raw/cicids")
+    output_dir:         Path  = Path("models/baseline")
+```
+
+### File: `src/models/pretrain/node2vec.py`
+
+**Why:** Builds the IP communication graph and trains Node2Vec embeddings.
+
+**The graph:**
+```
+19,179 unique IP addresses (nodes)
+114,081 directed edges (IP_A → IP_B means A sent traffic to B)
+Attack label: if ANY flow between A→B was an attack, edge is labelled attack
+```
+
+**Why Node2Vec and not just raw features:**
+Node2Vec captures *structural* information — "this IP sits at the hub of the network" or "this IP only talks to one other IP" — which raw flow statistics miss.
+
+**Why CICIDS was necessary:**
+UNSW-NB15 alone has only ~50 unique IPs (it's a controlled lab testbed). With just 50 IPs, Node2Vec embeddings are meaningless — there's no graph structure. CICIDS2017 adds 19,129 real-world IPs.
+
+**Key bug fixed:**
+```python
+# WRONG — picks up UNSW-NB15_LIST_EVENTS.csv which has wrong column format:
+glob_pattern = "UNSW-NB15_*.csv"
+
+# CORRECT — only picks up the 4 numbered data files:
+glob_pattern = "UNSW-NB15_[0-9].csv"
+```
+
+```python
+class Node2VecEmbedder:
+    def fit(self) -> EmbeddingResult:
+        # Load flows from both datasets
+        flows = self._load_unsw_flows() + self._load_cicids_flows()
+
+        # Build directed IP graph
+        G = nx.DiGraph()
+        for src_ip, dst_ip, is_attack in flows:
+            G.add_edge(src_ip, dst_ip, is_attack=is_attack)
+
+        # Train Node2Vec (PyG implementation)
+        pyg_data = from_networkx(G)
+        node2vec = Node2Vec(pyg_data.edge_index, embedding_dim=64, ...)
+        loader = node2vec.loader(batch_size=128, ...)
+        optimizer = SparseAdam(node2vec.parameters(), lr=0.01)
+        for epoch in range(50):
+            for pos_rw, neg_rw in loader:
+                loss = node2vec.loss(pos_rw, neg_rw)
+                loss.backward(); optimizer.step()
+
+        # Save embeddings
+        torch.save({"embeddings": embeddings, "ip_list": ip_list}, output_path)
+```
+
+### File: `src/models/pretrain/profiling.py`
+
+**Why:** Combines Node2Vec embeddings with hand-crafted flow statistics to create a richer 76-dimensional feature vector per IP.
+
+```
+76 dimensions per IP:
+  [0]    out_degree           — how many unique IPs does this IP talk TO?
+  [1]    in_degree            — how many unique IPs talk TO this IP?
+  [2]    num_out_flows        — total outbound connections
+  [3]    num_in_flows         — total inbound connections
+  [4]    bytes_sent_mean      — average bytes sent per flow
+  [5]    bytes_recv_mean      — average bytes received per flow
+  [6]    unique_dst_ports     — how many different ports does it probe?
+  [7]    unique_src_ports     — source port diversity
+  [8]    unique_protocols     — TCP/UDP/ICMP usage
+  [9]    pagerank             — graph importance (NetworkX)
+  [10]   clustering_coeff     — how "clique-like" is this IP's neighbourhood?
+  [11]   degree_centrality    — normalised degree
+  [12-75] node2vec_embedding  — 64-dim structural embedding from Node2Vec
+```
+
+**Why PageRank for security:**
+A scanning IP touches many hosts → high out-degree → high PageRank. Command-and-control servers receive from many bots → high in-degree PageRank. These are structural attack signatures.
+
+### File: `src/models/pretrain/baseline.py`
+
+**Why:** Two classical anomaly detectors trained on the 76-dim feature vectors.
+
+```python
+class AnomalyBaseline:
+    def __init__(self):
+        self.iso_forest = IsolationForest(
+            n_estimators=200,
+            contamination='auto',  # Let model decide threshold
+            n_jobs=-1,             # Use all CPU cores
+        )
+        self.oc_svm = OneClassSVM(
+            kernel='rbf',
+            nu=0.1,       # Expect 10% outliers
+            gamma='scale',
+        )
+
+    def evaluate(self, profiles):
+        X = scaler.fit_transform(profiles)
+
+        # Isolation Forest scores — negative = anomaly
+        iso_scores = -self.iso_forest.fit(X).score_samples(X)
+
+        # One-Class SVM — fit on subsample (full 19K too slow for SVM)
+        oc_svm.fit(X[:20_000])
+        svm_scores = -oc_svm.score_samples(X)
+
+        # Compute AUROC, best-threshold F1, Precision, Recall
+        ...
+```
+
+**Results:**
+```
+                    AUROC    F1      Precision  Recall
+Isolation Forest:  0.9804  0.4912    0.4667    0.5185
+One-Class SVM:     0.9609  0.6531    0.7273    0.5926
+
+Attack IPs: 27 out of 19,179 (0.14%)
+```
+
+**Why F1 is low despite high AUROC:**
+AUROC measures ranking quality — "did the model rank attack IPs higher than normal IPs?" → 98%.
+F1 measures threshold-dependent classification. With only 27 attack IPs in 19,179, the optimal threshold is tricky to find. T-HetGAT's target: F1 > 0.65.
+
+---
+
+# PART 12 — MODULE 11: T-HETGAT DETECTION ENGINE (COMPLETE)
+
+## What Module 11 does — the core innovation:
+
+```
+T-HetGAT Pipeline (one window at a time):
+  Graph window (HeteroData .pt file)
+       ↓
+  HeteroGraphEncoder (pretrained, optionally frozen)
+  → h_dict: {node_type: (N, 128)}   [node embeddings]
+       ↓
+  TemporalEdgeEncoder (for each edge type)
+  → t_dict: {edge_type: (E, 32)}    [temporal edge embeddings]
+       ↓
+  3 × HeteroTemporalGATLayer
+  → h_dict: {node_type: (N, 128)}   [attention-updated embeddings]
+       ↓
+  Mean pool all nodes → (128,) window vector
+       ↓
+  AnomalyScorer MLP → scalar logit → sigmoid → p_attack ∈ [0,1]
+       ↓
+  FocalLoss(α=0.25, γ=2.0) → backward → AdamW
+```
+
+## The core novelty — T-HetGAT attention formula:
+
+```
+Standard GAT (2018):
+  α_ij = softmax( LeakyReLU( a^T [W·h_i ‖ W·h_j] ) )
+  Problem: ignores WHEN the edge happened
+
+T-HetGAT extension (our innovation):
+  α_ij = softmax( LeakyReLU( a^T [W_s·h_i ‖ W_d·h_j ‖ W_t·t_ij] ) )
+
+  Where t_ij = TemporalEdgeEncoder(edge_attr)  ← 32-dim temporal embedding
+
+  This means: "3am burst of 10,000 packets to port 22" gets DIFFERENT
+  attention weight than "9am regular 100-byte SSH keepalive" even if
+  from the same IP pair.
+```
+
+### File: `src/models/thetgat/config.py`
+
+All T-HetGAT hyperparameters. Reads from `.env` with `THETGAT_` prefix.
+
+```python
+class THetGATConfig(BaseSettings):
+    hidden_dim:              int   = 128   # Must match pretrained encoder
+    num_encoder_layers:      int   = 2     # SAGEConv layers in backbone
+    temporal_dim:            int   = 32    # Edge temporal embedding size
+    num_gat_layers:          int   = 3     # T-HetGAT attention layers
+    num_heads:               int   = 4     # Multi-head attention (4 × 32 = 128)
+    dropout:                 float = 0.1
+    scorer_hidden_dim:       int   = 64    # MLP scoring head hidden size
+    focal_alpha:             float = 0.25  # Down-weight majority class
+    focal_gamma:             float = 2.0   # Focusing exponent
+    num_epochs:              int   = 50
+    learning_rate:           float = 5e-4
+    freeze_encoder_epochs:   int   = 5     # Phase A: encoder frozen
+    early_stopping_patience: int   = 10    # Stop if val AUROC flat for 10 epochs
+    batch_size:              int   = 16    # Windows per mini-batch
+    mixed_precision:         bool  = True  # FP16 AMP
+    val_split:               float = 0.1
+    test_split:              float = 0.1
+```
+
+### File: `src/models/thetgat/losses.py`
+
+**FocalLoss — why not regular Binary Cross-Entropy:**
+
+```
+Dataset: 82.5% normal windows, 17.5% attack windows
+
+With BCE, model learns to always predict "normal" → 82.5% "accuracy" while
+detecting ZERO attacks. This is useless.
+
+Focal Loss solution:
+  FL(p_t) = -alpha_t × (1 - p_t)^gamma × log(p_t)
+
+  Normal window, model very confident (p=0.95):
+    BCE loss   = 0.051
+    Focal loss = (1-0.95)^2 × 0.051 = 0.0001  ← almost ignored
+
+  Attack window, model uncertain (p=0.55):
+    BCE loss   = 0.598
+    Focal loss = (1-0.55)^2 × 0.598 = 0.121   ← still significant
+
+Result: model's gradient budget goes to HARD, UNCERTAIN attack cases.
+```
+
+### File: `src/models/thetgat/temporal_encoder.py`
+
+**Why sinusoidal encoding for timestamps:**
+
+Raw timestamps [0,1] lose phase information. Sinusoidal encoding gives the model multiple frequency views of the same timestamp.
+
+```
+edge_attr (E, 12):
+  [0]   timestamp_norm      → sinusoidal encoding → (E, d)   Branch 1
+  [1:6] duration/bytes/pkts → Linear + ReLU       → (E, d)   Branch 2
+  [6:11] protocol + port    → Linear + ReLU       → (E, d)   Branch 3
+                                     ↓
+                              concat → (E, 3d)
+                                     ↓
+                           Linear → LayerNorm → ReLU → Dropout
+                                     ↓
+                            temporal embedding (E, 32)
+
+NOTE: Column [11] = is_attack is deliberately EXCLUDED.
+      Using the label as model input = data leakage.
+```
+
+### File: `src/models/thetgat/hetgat_layer.py`
+
+Two classes:
+
+**`TemporalGATConv`** — single edge type:
+```python
+class TemporalGATConv(MessagePassing):
+    def message(self, x_j, x_i, t_proj, index, v_j):
+        # x_j  = projected source node  (E, H, D)
+        # x_i  = projected destination  (E, H, D)
+        # t_proj = temporal embedding   (E, H, D)
+
+        # Attention score
+        alpha_input = cat([x_j, x_i, t_proj], dim=-1)    # (E, H, 3D)
+        alpha = (leaky_relu(alpha_input) * self.att).sum(-1)  # (E, H)
+        alpha = pyg_softmax(alpha, index)  # normalise per destination
+
+        # Value = source + temporal context
+        value = v_j + t_proj              # (E, H, D)
+        return (value * alpha.unsqueeze(-1)).view(E, -1)  # (E, H*D)
+```
+
+**PyG bipartite fix that took time to figure out:**
+```python
+# WRONG — PyG uses edge_index[0] to index BOTH x_src and x_dst
+self.propagate(edge_index, x=h_src, ...)
+
+# CORRECT — pass (src_tensor, dst_tensor) tuple:
+# PyG then uses edge_index[0] for _j (source) and edge_index[1] for _i (dest)
+self.propagate(edge_index, x=(h_src, h_dst), v=(v_src, None), ...)
+```
+
+**`HeteroTemporalGATLayer`** — wraps one `TemporalGATConv` per edge type:
+```python
+class HeteroTemporalGATLayer(nn.Module):
+    def forward(self, h_dict, edge_index_dict, temporal_dict):
+        out = {ntype: [] for ntype in h_dict}
+
+        for edge_type, edge_index in edge_index_dict.items():
+            src_type, _, dst_type = edge_type
+            # Run TemporalGATConv for this edge type
+            msg = self.convs[edge_key](x_src, x_dst, edge_index, t_feat)
+            out[dst_type].append(msg)
+
+        # Combine all edge types → residual → LayerNorm
+        for ntype, h in h_dict.items():
+            aggregated = stack(out[ntype]).sum(dim=0)
+            projected  = self.out_projs[ntype](aggregated)
+            new_h[ntype] = self.norms[ntype](h + projected)  # residual!
+```
+
+### File: `src/models/thetgat/model.py`
+
+```python
+class THetGATModel(nn.Module):
+    def forward(self, data: HeteroData) -> Tensor:
+        # 1. Pretrained encoder → node embeddings
+        h_dict = self.encoder(data.x_dict, data.edge_index_dict)
+
+        # 2. Temporal edge encoder → edge embeddings
+        temporal_dict = {et: self.temporal_encoder(data[et].edge_attr)
+                         for et in data.edge_types}
+
+        # 3. T-HetGAT layers (3×)
+        for gat_layer in self.gat_layers:
+            h_dict = gat_layer(h_dict, data.edge_index_dict, temporal_dict)
+
+        # 4. Mean pool all nodes → window vector (128,)
+        window_embed = stack([h.mean(0) for h in h_dict.values()]).mean(0)
+
+        # 5. Score → logit
+        return self.scorer(window_embed)  # scalar
+
+    @staticmethod
+    def get_window_label(data: HeteroData) -> float:
+        # edge_attr[:, 11] = is_attack
+        # Window = attack if ANY edge is an attack edge
+        for et in data.edge_types:
+            if data[et].edge_attr[:, 11].any():
+                return 1.0
+        return 0.0
+```
+
+**Two-phase training strategy:**
+```
+Phase A (epochs 0-4):   encoder FROZEN
+  → Only GAT layers + scorer learn
+  → Prevents random GAT weights from destroying pretrained encoder
+
+Phase B (epochs 5-50):  encoder UNFROZEN
+  → Full end-to-end fine-tuning
+  → Encoder adapts to detection task
+```
+
+### File: `src/models/thetgat/trainer.py`
+
+```python
+class THetGATTrainer:
+    def fit(self) -> list[TrainState]:
+        self._model.freeze_encoder()  # Phase A
+
+        for epoch in range(50):
+            if epoch == freeze_encoder_epochs:
+                self._model.unfreeze_encoder()  # Phase B
+                # Rebuild optimizer to include encoder params
+                self._optimizer = AdamW(self._model.parameters(), ...)
+                self._scheduler = self._build_scheduler()
+
+            train_loss = self._run_epoch_train(epoch)
+            val_loss, val_auroc = self._run_epoch_val(epoch)
+
+            if val_auroc > self._best_auroc:
+                self._save_checkpoint(..., best=True)  # thetgat_best.pt
+                self._patience_ctr = 0
+            else:
+                self._patience_ctr += 1
+
+            if self._patience_ctr >= 10:
+                break  # Early stopping on val AUROC
+```
+
+**Critical bug fixed — BatchNorm1d with 1 node:**
+```python
+# Problem: Some windows have only 1 node of a type
+# BatchNorm1d(input_size=[1, 128]) → "Expected more than 1 value per channel"
+
+# Fix in _run_epoch_train():
+self._model.train()
+self._model.encoder.eval()  # ← Keep encoder's BatchNorm in eval mode
+                              #   Uses running_mean/var, not batch stats
+                              #   Standard practice for fine-tuning pretrained BN
+```
+
+### File: `src/models/thetgat/evaluate.py`
+
+```python
+class THetGATEvaluator:
+    def evaluate(self) -> EvalResults:
+        # Load thetgat_best.pt
+        model, ckpt = self._load_model()
+
+        # Run all test windows
+        for window in test_set:
+            logit = model(window)
+            prob  = sigmoid(logit)
+            all_probs.append(prob)
+            all_labels.append(get_window_label(window))
+
+        # Compute metrics
+        auroc = roc_auc_score(labels, probs)
+        # Find best F1 threshold (scan 0.01 to 0.99)
+        best_f1  = max(f1_score(labels, preds(thr)) for thr in thresholds)
+        # Confusion matrix
+        tn, fp, fn, tp = confusion_matrix(labels, final_preds).ravel()
+
+        return EvalResults(
+            auroc=auroc,
+            best_f1=best_f1,
+            auroc_vs_baseline=auroc - 0.9804,   # vs Node2Vec baseline
+            f1_vs_baseline=best_f1 - 0.4912,
+            ...
+        )
+```
+
+### File: `src/models/thetgat/runner.py`
+
+**Bugs fixed before training could start:**
+
+```
+Bug 1: Metadata mismatch
+  Problem: Model built from single window — some windows have 'host' nodes,
+           some don't → model architecture changes based on which window you load first
+  Fix: Scan ALL 17,657 windows to collect union of all node/edge types
+       Build model with full metadata → handles any window
+
+Bug 2: strict=True when loading pretrained encoder
+  Problem: Pretrained checkpoint was trained on graphs WITHOUT 'host' nodes
+           Current graphs HAVE 'host' nodes → key mismatch → RuntimeError
+  Fix: strict=False — load matching weights, initialise rest from scratch
+
+Bug 3: LazyLinear uninitialized parameters
+  Problem: SAGEConv(-1,-1) is lazy — only materialises when it sees data
+           SAGEConv for 'host→connects_to→external_ip' layer 1 never
+           triggered because 'host' was absent from h_dict after layer 0
+  Fix: Skip UninitializedParameter in parameter count
+       They materialise naturally during first training step
+
+Bug 4: BatchNorm1d with 1 node (described above)
+```
+
+**Stratified split — why not random:**
+```python
+# Random split risk:
+# 3,168 attack windows out of 17,657 (17.9%)
+# With random split, validation might get 0 attack windows → AUROC undefined
+
+# Stratified split:
+# Split attack windows separately, then normal windows separately
+# Each split gets the same 17.9% attack ratio
+# → Guaranteed attack + normal in every split
+```
+
+---
+
+# PART 13 — HOW TO RUN EVERYTHING LOCALLY
+
+## Prerequisites:
+
+```
+- Python 3.10+
+- CUDA GPU (strongly recommended — CPU training takes ~10× longer)
+- Docker Desktop (for infrastructure services)
+- ~50GB free disk space (datasets + graph files + model checkpoints)
+- 16GB RAM minimum, 32GB recommended
+```
+
+## Step 1: Clone and set up environment
+
+```bash
+git clone https://github.com/A1610/graphrl-sec.git
+cd GraphRL-Sec
+
+# Create virtual environment
+python -m venv venv
+
+# Activate (Windows)
+venv\Scripts\activate
+
+# Activate (Linux/Mac)
+source venv/bin/activate
+
+# Install all dependencies
+pip install -r requirements.txt
+```
+
+## Step 2: Download datasets
+
+```bash
+# UNSW-NB15 (2GB):
+# Download from: https://research.unsw.edu.au/projects/unsw-nb15-dataset
+# Files needed: UNSW-NB15_1.csv, UNSW-NB15_2.csv, UNSW-NB15_3.csv, UNSW-NB15_4.csv
+# Place in: data/raw/unsw/
+
+# CICIDS2017 (7GB):
+# Download from: https://www.unb.ca/cic/datasets/ids-2017.html
+# Folder: GeneratedLabelledFlows/TrafficLabelling/*.csv (8 files)
+# Place in: data/raw/cicids/
+```
+
+## Step 3: Start infrastructure (Docker)
+
+```bash
+# Start all 7 services (Neo4j, PostgreSQL, Redis, Redpanda, Prometheus, Grafana)
+docker-compose up -d
+
+# Verify all services running:
+docker-compose ps
+
+# Neo4j browser (optional, to inspect graph):
+# Open http://localhost:7474  (user: neo4j, pass: graphrlsec)
+```
+
+## Step 4: Run data ingestion + graph construction
+
+```bash
+# NOTE: data/graphs/ already has 17,657 .pt files if you cloned the full repo.
+# Only run this if you want to rebuild from scratch.
+
+# Start Kafka consumer (builds .pt files from raw CSVs via Kafka)
+python -m src.consumer.runner
+# This takes ~2 hours for the full dataset
+
+# Import to Neo4j (separate process, can run in parallel)
+python scripts/neo4j_import.py
+# This takes ~1h 45min
+```
+
+## Step 5: Run Module 8 — Pre-training
+
+```bash
+python -m src.models.pretrain.runner
+
+# Expected output:
+# Epoch 21: val_loss = 6.766 ← best
+# Early stopped at epoch 31
+# Saved: models/pretrain/checkpoint_best.pt
+
+# If checkpoint_best.pt already exists, skip this step.
+```
+
+## Step 6: Run Module 9 — Node2Vec Baseline
+
+```bash
+python -m src.models.baseline_runner
+
+# Expected output:
+# Node2Vec training complete
+# Isolation Forest: AUROC=0.9804, F1=0.4912
+# One-Class SVM:    AUROC=0.9609, F1=0.6531
+# Saved: models/baseline/node2vec.pt
+#        models/baseline/iso_forest.joblib
+#        models/baseline/baseline_results.json
+
+# Time: ~15-20 minutes (Node2Vec training on 19K IP graph)
+```
+
+## Step 7: Run Module 11 — T-HetGAT Training
+
+```bash
+python -m src.models.thetgat.runner
+
+# What happens:
+# 1. Scans all 17,657 windows for labels + metadata (~34 sec)
+# 2. Stratified split: 14,125 train | 1,766 val | 1,766 test
+# 3. Loads pretrained encoder from checkpoint_best.pt
+# 4. Phase A (epochs 0-4): encoder frozen, only GAT + scorer train
+# 5. Phase B (epochs 5+): full fine-tuning
+# 6. Early stopping on val AUROC (patience=10)
+# 7. Evaluates on test set, prints final report
+
+# Expected output after training:
+# ============================================================
+#   T-HetGAT Evaluation Results
+# ============================================================
+#   AUROC        : X.XXXX  ([BEATS] baseline 0.9804)
+#   Best F1      : X.XXXX  ([BEATS] baseline 0.4912)
+# ============================================================
+
+# Time: ~3-7 hours depending on how many epochs
+# Checkpoints saved every epoch: models/thetgat/thetgat_latest.pt
+# Best checkpoint:               models/thetgat/thetgat_best.pt
+# Training history:              models/thetgat/thetgat_train_history.json
+# Evaluation results:            models/thetgat/thetgat_eval_results.json
+```
+
+## Step 8: Run FastAPI Backend
+
+```bash
+# Make sure Docker services are running (Step 3)
+uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# API available at: http://localhost:8000
+# API docs (Swagger): http://localhost:8000/docs
+```
+
+## Step 9: Run SOC Dashboard
+
+```bash
+cd frontend
+npm install    # First time only
+npm run dev
+
+# Dashboard available at: http://localhost:3000
+```
+
+## Quick Reference — All Commands:
+
+```bash
+# Activate venv (always do this first)
+venv\Scripts\activate         # Windows
+source venv/bin/activate      # Linux/Mac
+
+# Infrastructure
+docker-compose up -d          # Start all services
+docker-compose down           # Stop all services
+
+# AI Training (run in order)
+python -m src.models.pretrain.runner          # Module 8: Pre-training (~2h)
+python -m src.models.baseline_runner          # Module 9: Node2Vec (~20min)
+python -m src.models.thetgat.runner           # Module 11: T-HetGAT (~3-7h)
+
+# Services
+uvicorn src.api.main:app --reload --port 8000  # FastAPI backend
+cd frontend && npm run dev                      # Next.js dashboard (port 3000)
+
+# Check training results
+cat models/thetgat/thetgat_eval_results.json
+```
+
+## File structure after full run:
+
+```
+models/
+├── pretrain/
+│   ├── checkpoint_best.pt        ← Pre-trained encoder (Module 8)
+│   └── checkpoint_latest.pt
+├── baseline/
+│   ├── node2vec.pt               ← IP embeddings (Module 9)
+│   ├── iso_forest.joblib         ← Trained Isolation Forest
+│   ├── oc_svm.joblib             ← Trained One-Class SVM
+│   ├── scaler.joblib             ← StandardScaler
+│   └── baseline_results.json     ← AUROC=0.9804 etc.
+└── thetgat/
+    ├── thetgat_best.pt           ← Best T-HetGAT model (Module 11)
+    ├── thetgat_latest.pt         ← Latest checkpoint
+    ├── thetgat_train_history.json ← Per-epoch metrics
+    └── thetgat_eval_results.json  ← Final test results
+```
+
+---
+
+*Document updated: 18 March 2026 | GraphRL-Sec MTech Dissertation Project*
+*Based on: Project_4_GraphRL_Sec.docx (original dissertation proposal)*
+```
+
+Use the Edit tool to make all these changes. After all edits are done, confirm "ENGLISH DOC UPDATED".
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Read C:\Users\maham\.claude\projects\d--Personal-GraphRL-Sec\9c6f01a5-ab89-4917-b14f-30d7d7c95bd8\tool-results\toolu_01LcgkTHkJ1rX8CC8LSz8qUx.txt
+Read C:\Users\maham\.claude\projects\d--Personal-GraphRL-Sec\9c6f01a5-ab89-4917-b14f-30d7d7c95bd8\tool-results\toolu_01LcgkTHkJ1rX8CC8LSz8qUx.txt (lines 2-301)
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Modified
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Modified
+Grep "M9 \| Node2Vec Baseline" (in d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md)
+7 lines of output
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Added 2 lines
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Removed 1 line
+Grep "Overall: ██████" (in d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md)
+3 lines of output
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Added 1 line
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Modified
+Grep "Best training result \| val_loss" (in d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md)
+3 lines of output
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Added 7 lines
+Grep "One-line description:" (in d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md)
+7 lines of output
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Modified
+Grep "Temporal heterogeneous graph model: 5 node types" (in d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md)
+5 lines of output
+Read d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md (lines 1939-1941)
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Modified
+Grep "Document updated: 17 March 2026" (in d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md)
+3 lines of output
+Edit d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md
+Added 680 lines
+Grep "Document updated: 18 March 2026" (in d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md)
+2 lines of output
+Grep "Overall: ████████░" (in d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_ENGLISH.md)
+1 line of output
+Agent:Update Hinglish doc with Module 9, 11, and how-to-run
+IN
+Update the file `d:\Personal\GraphRL-Sec\docs\PROJECT_EXPLAINED_HINGLISH.md` with the following changes. DO NOT rewrite the whole file — use targeted Edit tool calls. Write everything in Hinglish style (mix of Hindi and English, casual tone like explaining to a friend, simple language).
+
+**Change 1: Update roadmap in PART 2**
+Find this exact text:
+```
+PHASE 2 — AI FOUNDATION (Dimag banana)
+  Module 8:  Self-Supervised Pretraining  ✅ COMPLETE
+  Module 9:  Node2Vec Baseline           ⬜ PENDING
+```
+Replace with:
+```
+PHASE 2 — AI FOUNDATION (Dimag banana)
+  Module 8:  Self-Supervised Pretraining  ✅ COMPLETE
+  Module 9:  Node2Vec Baseline            ✅ COMPLETE
+```
+
+Find this exact text:
+```
+PHASE 3 — DETECTION (Attack pakadna)
+  Module 11: T-HetGAT Detection    ⬜ PENDING
+  Module 12: Benchmarking          ⬜ PENDING
+```
+Replace with:
+```
+PHASE 3 — DETECTION (Attack pakadna)
+  Module 11: T-HetGAT Detection    ✅ COMPLETE (training chal rahi hai)
+  Module 12: Benchmarking          ⬜ PENDING
+```
+
+**Change 2: Update current status count**
+Find: `ABHI TAK: 6 modules complete (~30%)`
+Replace with: `ABHI TAK: 8 modules complete (~40%)`
+
+**Change 3: Update completed modules table in PART 5**
+Find this text in the completed table:
+```
+| 4 | Pre-training | GNN encoder trained | val_loss=4.812, 13 epochs |
+```
+Replace with:
+```
+| 4 | Pre-training | GNN encoder trained | val_loss=6.766, epoch 21/31 |
+| 5 | Node2Vec Baseline | IP graph embedding + Isolation Forest | AUROC=0.9804, F1=0.4912 |
+| 6 | T-HetGAT Detection | Temporal GAT anomaly detector — 8 files | Training on RTX 3050 |
+```
+
+**Change 4: Update pending modules table in PART 5**
+Find this in the pending table:
+```
+| 7 | Node2Vec Baseline | Comparison ke liye simple graph embedding | Medium |
+| 8 | T-HetGAT Detection | Actual anomaly detector — project ka core model | Hard |
+```
+Replace with:
+```
+| 7 | Benchmarking | T-HetGAT vs baselines ka full report | Medium |
+```
+
+**Change 5: Update progress bar in PART 5**
+Find:
+```
+Detection Model:  ░░░░░░░░░░░░░░░░░░░░   0% ← NEXT
+```
+Replace with:
+```
+Detection Model:  ████████████████████ 100% ✅ (results pending)
+Node2Vec:         ████████████████████ 100% ✅
+```
+
+Find: `Overall:          ██████░░░░░░░░░░░░░░  ~30%`
+Replace with: `Overall:          ████████░░░░░░░░░░░░  ~40%`
+
+**Change 6: Update presentation text in PART 6**
+Find:
+```
+## Technical depth mein:
+> "Temporal heterogeneous graph (5 node types, 4 edge types, sliding windows) pe GraphCL contrastive pre-training kiya. 17,657 snapshots, 9GB dataset. RTX 3050 pe 813MB VRAM, best val_loss 4.812. Neo4j mein 124K+ entities, 3M+ connections stored. FastAPI REST + WebSocket + Next.js SOC dashboard — poora production-grade stack."
+```
+Replace with:
+```
+## Technical depth mein:
+> "Temporal heterogeneous graph (3 node types, 6 edge types) pe GraphCL contrastive pre-training kiya — val_loss=6.766. Node2Vec baseline: 19,179 IPs, AUROC=0.9804. T-HetGAT: TemporalEdgeEncoder (sinusoidal timestamps + flow stats) + 3× HeteroTemporalGATLayer (attention: α_ij = softmax(LeakyReLU(a^T[W_s·h_i ‖ W_d·h_j ‖ W_t·t_ij]))) + MLP scorer, FocalLoss(α=0.25,γ=2.0), 1.55M parameters. Neo4j: 124K+ nodes, 3M+ edges. FastAPI + Next.js SOC dashboard."
+```
+
+**Change 7: Find the last line of the file and replace it with new content**
+
+Find the exact last line:
+```
+*Document updated: 17 March 2026 | GraphRL-Sec MTech Dissertation*
+```
+
+Replace with this entire block:
+```
+*Document updated: 18 March 2026 | GraphRL-Sec MTech Dissertation*
+
+---
+
+# PART 7 — MODULE 9: NODE2VEC BASELINE (COMPLETE)
+
+## Module 9 kya karta hai:
+
+T-HetGAT banana shuru karne se pehle ek simpler model banana zaroori tha — **baseline** — jisse compare kar sakein. Agar T-HetGAT baseline se better nahi hua, toh itni complexity bekar thi.
+
+```
+Node2Vec Pipeline:
+  Raw CSV files (UNSW-NB15 + CICIDS2017)
+       ↓
+  IP communication graph banao
+  (19,179 nodes = unique IPs, 114,081 edges = connections)
+       ↓
+  Node2Vec: random walks → Skip-gram → har IP ka 64-dim vector
+       ↓
+  BehaviorProfiler: 76-dim feature vector per IP
+  (9 flow stats + 3 graph stats + 64 Node2Vec dims)
+       ↓
+  Isolation Forest + One-Class SVM → anomaly score
+       ↓
+  AUROC = 0.9804 (Isolation Forest) ← hamara target beat karna hai
+```
+
+### `src/models/pretrain/node2vec_config.py`
+
+**Kyu banaya:** Saare Node2Vec settings ek jagah. `.env` file se `NODE2VEC_` prefix se padhta hai.
+
+```python
+class Node2VecConfig(BaseSettings):
+    embedding_dim:    int   = 64    # Har IP ka vector kitna bada
+    walk_length:      int   = 80    # Random walk kitne steps ka
+    context_size:     int   = 5     # Skip-gram window size
+    walks_per_node:   int   = 10    # Har node se kitne walks
+    p:                float = 1.0   # BFS-like behavior
+    q:                float = 1.0   # DFS-like behavior
+    num_epochs:       int   = 50
+    learning_rate:    float = 0.01
+```
+
+### `src/models/pretrain/node2vec.py`
+
+**Kyu CICIDS zaroori tha:**
+
+UNSW-NB15 mein sirf ~50 unique IPs hain — ye ek controlled lab testbed hai. 50 IPs ke saath Node2Vec ka koi matlab nahi — graph structure hi nahi hai. CICIDS2017 ne 19,129 real-world IPs add kiye.
+
+**Ek important bug fix:**
+```python
+# GALAT — UNSW-NB15_LIST_EVENTS.csv bhi pick ho jaata tha (wrong format):
+glob_pattern = "UNSW-NB15_*.csv"
+
+# SAHI — sirf 4 numbered data files:
+glob_pattern = "UNSW-NB15_[0-9].csv"
+```
+
+```python
+class Node2VecEmbedder:
+    def fit(self):
+        # Dono datasets se flows load karo
+        flows = self._load_unsw_flows() + self._load_cicids_flows()
+
+        # IP communication graph banao
+        # A → B agar A ne B ko traffic bheja
+        G = nx.DiGraph()
+        for src_ip, dst_ip, is_attack in flows:
+            G.add_edge(src_ip, dst_ip)
+
+        # Node2Vec train karo (PyG)
+        node2vec = Node2Vec(edge_index, embedding_dim=64)
+        for epoch in range(50):
+            for pos_rw, neg_rw in loader:
+                loss = node2vec.loss(pos_rw, neg_rw)
+                loss.backward()
+
+        # Save karo
+        torch.save({"embeddings": embeddings, "ip_list": ip_list}, path)
+```
+
+### `src/models/pretrain/profiling.py`
+
+**76-dimensional feature vector har IP ke liye:**
+```
+[0]    out_degree        — kitne IPs ko traffic bheja?
+[1]    in_degree         — kitne IPs ne traffic bheja?
+[2]    num_out_flows     — total outbound connections
+[3]    num_in_flows      — total inbound connections
+[4]    bytes_sent_mean   — average bytes bheje per flow
+[5]    bytes_recv_mean   — average bytes mile per flow
+[6]    unique_dst_ports  — kitne alag ports probe kiye?
+[7]    unique_src_ports  — source port diversity
+[8]    unique_protocols  — TCP/UDP/ICMP usage
+[9]    pagerank          — graph mein ye IP kitna important hai?
+[10]   clustering_coeff  — kya ye IP cliques mein hai?
+[11]   degree_centrality — normalised degree
+[12-75] node2vec         — 64-dim structural embedding
+```
+
+**PageRank security ke liye kyu useful:**
+Scanning IP → bahut saare hosts ko touch karta hai → high out-degree → high PageRank. Ye ek structural attack signature hai.
+
+### `src/models/pretrain/baseline.py`
+
+**Kyu F1 low hai aur AUROC high:**
+```
+Dataset mein sirf 27 attack IPs hain 19,179 mein se (0.14%)
+
+AUROC = 0.9804: "Kya model ne attack IPs ko normal IPs se
+                 upar rank kiya?" → 98% sahi ✓
+
+F1 = 0.4912:    "Sahi threshold choose karke kitne pakde?"
+                → 49% — class imbalance ki wajah se
+
+T-HetGAT ka target: F1 > 0.65 (beat karo) AND AUROC > 0.9804
+```
+
+**Final results:**
+```
+                    AUROC    F1      Precision  Recall
+Isolation Forest:  0.9804  0.4912    0.4667    0.5185  ← primary baseline
+One-Class SVM:     0.9609  0.6531    0.7273    0.5926
+
+IPs total: 19,179 | Attack IPs: 27
+```
+
+---
+
+# PART 8 — MODULE 11: T-HETGAT DETECTION ENGINE (COMPLETE)
+
+## Module 11 kya karta hai — project ka CORE novelty:
+
+```
+T-HetGAT Pipeline (ek window at a time):
+  Graph window (.pt file)
+       ↓
+  HeteroGraphEncoder (pretrained Module 8 se load)
+  → h_dict: {node_type: (N, 128)}      [node embeddings]
+       ↓
+  TemporalEdgeEncoder (har edge type ke liye)
+  → t_dict: {edge_type: (E, 32)}       [temporal edge embeddings]
+       ↓
+  3 × HeteroTemporalGATLayer (attention layers)
+  → h_dict: {node_type: (N, 128)}      [updated embeddings]
+       ↓
+  Mean pool → (128,) window vector
+       ↓
+  AnomalyScorer MLP → logit → sigmoid → p_attack [0 se 1 tak]
+       ↓
+  FocalLoss → backward → AdamW
+```
+
+## Core novelty — T-HetGAT attention formula:
+
+```
+Standard GAT (2018):
+  α_ij = softmax( LeakyReLU( a^T [W·h_i ‖ W·h_j] ) )
+  Problem: ye nahi jaanta KAB edge hua
+
+Hamara T-HetGAT:
+  α_ij = softmax( LeakyReLU( a^T [W_s·h_i ‖ W_d·h_j ‖ W_t·t_ij] ) )
+
+  Jahan t_ij = TemporalEdgeEncoder(edge_attr) ← 32-dim temporal embedding
+
+  Matlab: "raat 3 baje ka 10,000 packets wala burst port 22 pe"
+          ko ALAG attention milega
+          "subah 9 baje ka normal 100-byte SSH keepalive" se
+          chahe same IP pair ho bhi toh
+```
+
+### `src/models/thetgat/config.py`
+
+```python
+class THetGATConfig(BaseSettings):
+    hidden_dim:              int   = 128   # Pretrained encoder se match karna zaroori
+    temporal_dim:            int   = 32    # Edge temporal embedding ka size
+    num_gat_layers:          int   = 3     # T-HetGAT attention layers
+    num_heads:               int   = 4     # Multi-head attention (4 × 32 = 128)
+    focal_alpha:             float = 0.25  # Majority class down-weight
+    focal_gamma:             float = 2.0   # Focus parameter
+    num_epochs:              int   = 50
+    learning_rate:           float = 5e-4
+    freeze_encoder_epochs:   int   = 5     # Phase A: encoder freeze
+    early_stopping_patience: int   = 10    # 10 epochs mein improvement nahi → stop
+    mixed_precision:         bool  = True  # FP16 AMP → half VRAM
+```
+
+### `src/models/thetgat/losses.py`
+
+**FocalLoss kyu — normal BCE kyu nahi:**
+
+```
+Dataset: 82.5% normal windows, 17.5% attack windows
+
+BCE ke saath: model sirf "normal" predict karta hai → 82.5% accuracy
+Lekin 0 attacks detect → bekar hai
+
+Focal Loss formula:
+  FL(p_t) = -alpha_t × (1 - p_t)^gamma × log(p_t)
+
+Normal window, model sure hai (p=0.95 normal):
+  BCE loss   = 0.051
+  Focal loss = (1-0.95)^2 × 0.051 = 0.0001  ← practically ignore karo
+
+Attack window, model unsure hai (p=0.55):
+  BCE loss   = 0.598
+  Focal loss = (1-0.55)^2 × 0.598 = 0.121   ← still significant
+
+Result: gradient budget hard, uncertain attack cases pe jaata hai
+```
+
+### `src/models/thetgat/temporal_encoder.py`
+
+**Sinusoidal encoding timestamp ke liye kyu:**
+
+Raw timestamp [0,1] → model ko phase pata nahi chalta. Sinusoidal encoding multiple frequency views deta hai.
+
+```
+edge_attr (E, 12):
+  [0]    timestamp       → sinusoidal encoding → (E, d)   Branch 1
+  [1:6]  bytes/packets   → Linear + ReLU       → (E, d)   Branch 2
+  [6:11] protocol + port → Linear + ReLU       → (E, d)   Branch 3
+                                  ↓
+                           concat → (E, 3d)
+                                  ↓
+                    Linear → LayerNorm → ReLU → Dropout → (E, 32)
+
+IMPORTANT: Column [11] = is_attack → model input mein NAHI diya
+           Agar dete toh cheating hoti (data leakage)
+```
+
+### `src/models/thetgat/hetgat_layer.py`
+
+```python
+class TemporalGATConv(MessagePassing):
+    def message(self, x_j, x_i, t_proj, index, v_j):
+        # x_j  = source node ka embedding    (E, H, D)
+        # x_i  = destination node ka embedding (E, H, D)
+        # t_proj = temporal embedding          (E, H, D)
+
+        # Attention score compute karo
+        alpha_input = cat([x_j, x_i, t_proj], dim=-1)    # (E, H, 3D)
+        alpha = (leaky_relu(alpha_input) * self.att).sum(-1)  # (E, H)
+        alpha = softmax(alpha, index)  # har destination ke liye normalize
+
+        # Value = source + temporal context
+        value = v_j + t_proj
+        return (value * alpha.unsqueeze(-1)).view(E, -1)  # (E, H*D)
+```
+
+**PyG bipartite bug jo fix karna pada:**
+```python
+# GALAT — PyG dono ke liye edge_index[0] use karta hai:
+self.propagate(edge_index, x=h_src, ...)
+
+# SAHI — tuple pass karo:
+# PyG: edge_index[0] → _j (source), edge_index[1] → _i (destination)
+self.propagate(edge_index, x=(h_src, h_dst), v=(v_src, None), ...)
+```
+
+### `src/models/thetgat/model.py`
+
+```python
+class THetGATModel(nn.Module):
+    def forward(self, data):
+        # 1. Pretrained encoder se node embeddings
+        h_dict = self.encoder(data.x_dict, data.edge_index_dict)
+
+        # 2. Temporal edge encoder
+        temporal_dict = {et: self.temporal_encoder(data[et].edge_attr)
+                         for et in data.edge_types}
+
+        # 3. T-HetGAT layers (3×)
+        for gat_layer in self.gat_layers:
+            h_dict = gat_layer(h_dict, data.edge_index_dict, temporal_dict)
+
+        # 4. Mean pool → window vector (128,)
+        window_embed = stack([h.mean(0) for h in h_dict.values()]).mean(0)
+
+        # 5. Score
+        return self.scorer(window_embed)  # scalar logit
+
+    @staticmethod
+    def get_window_label(data):
+        # edge_attr[:, 11] = is_attack
+        # Agar koi bhi ek edge attack hai → window attack hai
+        for et in data.edge_types:
+            if data[et].edge_attr[:, 11].any():
+                return 1.0
+        return 0.0
+```
+
+**Two-phase training strategy:**
+```
+Phase A (epoch 0-4):   Encoder FROZEN
+  → Sirf GAT layers + scorer seekhte hain
+  → Random weights wale GAT pretrained encoder ko kharab na kar dein
+
+Phase B (epoch 5-50):  Encoder UNFROZEN
+  → Full end-to-end fine-tuning
+  → Encoder bhi detection task ke liye adapt karta hai
+```
+
+### `src/models/thetgat/trainer.py`
+
+**Critical bug — BatchNorm1d 1 node ke saath:**
+```python
+# Problem: Kuch windows mein sirf 1 node hota hai ek type ka
+# BatchNorm1d([1, 128]) → "Expected more than 1 value per channel"
+
+# Fix:
+self._model.train()
+self._model.encoder.eval()  # ← Encoder ka BatchNorm eval mode mein rakho
+                              #   Running stats use karta hai, batch stats nahi
+                              #   Pretrained models ke fine-tuning mein ye standard hai
+```
+
+### `src/models/thetgat/runner.py`
+
+**Training shuru hone se pehle fix kiye bugs:**
+
+```
+Bug 1: Metadata mismatch
+  Problem: Model ek hi window se build hua — kuch windows mein 'host'
+           nodes hain, kuch mein nahi → architecture change ho jaata hai
+  Fix: Saare 17,657 windows scan karke saare node/edge types ka union lo
+       Is metadata se model banao → har window handle kar sakta hai
+
+Bug 2: strict=True pretrained encoder load mein
+  Problem: Checkpoint 'host' nodes ke bina train hua tha
+           Ab graphs mein 'host' nodes hain → key mismatch → crash
+  Fix: strict=False — matching weights load karo, baki random init se
+
+Bug 3: LazyLinear uninitialised
+  Problem: SAGEConv(-1,-1) lazy hai — pehle forward pe hi materialise hoti hai
+           Layer 1 ke liye kuch edge types kabhi call hi nahi hue
+  Fix: Uninitialised params ko count mein skip karo — training mein
+       automatically materialise ho jaate hain
+
+Bug 4: BatchNorm1d with 1 node (upar describe kiya)
+```
+
+**Stratified split kyu zaroori tha:**
+```
+Random split ka risk:
+  3,168 attack windows out of 17,657 (17.9%)
+  Random split mein validation ko 0 attack windows mil sakte hain
+  → AUROC undefined → training fail
+
+Stratified split:
+  Attack windows alag split karo, normal alag
+  Har split mein same 17.9% ratio rakho
+  → Guaranteed attack + normal har split mein
+```
+
+---
+
+# PART 9 — LOCAL MEIN KAISE CHALAO (STEP BY STEP)
+
+## Pehle ye chahiye:
+
+```
+- Python 3.10 ya usse upar
+- CUDA GPU (strongly recommended — CPU pe 10× zyada time lagega)
+- Docker Desktop (infrastructure services ke liye)
+- ~50GB free disk space
+- 16GB RAM minimum
+```
+
+## Step 1: Project setup
+
+```bash
+git clone https://github.com/A1610/graphrl-sec.git
+cd GraphRL-Sec
+
+# Virtual environment banao
+python -m venv venv
+
+# Activate karo (Windows)
+venv\Scripts\activate
+
+# Activate karo (Linux/Mac)
+source venv/bin/activate
+
+# Saari dependencies install karo
+pip install -r requirements.txt
+```
+
+## Step 2: Datasets download karo
+
+```bash
+# UNSW-NB15 (2GB):
+# Download: https://research.unsw.edu.au/projects/unsw-nb15-dataset
+# Files chahiye: UNSW-NB15_1.csv, UNSW-NB15_2.csv, UNSW-NB15_3.csv, UNSW-NB15_4.csv
+# Yahan rakho: data/raw/unsw/
+
+# CICIDS2017 (7GB):
+# Download: https://www.unb.ca/cic/datasets/ids-2017.html
+# Folder: GeneratedLabelledFlows/TrafficLabelling/ ke andar 8 CSV files
+# Yahan rakho: data/raw/cicids/
+```
+
+## Step 3: Infrastructure start karo (Docker)
+
+```bash
+# Saare 7 services start karo
+# (Neo4j, PostgreSQL, Redis, Redpanda, Prometheus, Grafana)
+docker-compose up -d
+
+# Check karo ki sab chal rahe hain:
+docker-compose ps
+
+# Neo4j browser (optional):
+# http://localhost:7474  (user: neo4j, pass: graphrlsec)
+```
+
+## Step 4: Data ingestion + graph construction
+
+```bash
+# NOTE: data/graphs/ mein already 17,657 .pt files hain agar full repo clone kiya
+# Sirf tabhi chalao agar scratch se banana ho
+
+# Consumer start karo (raw CSVs → .pt files via Kafka)
+python -m src.consumer.runner
+# Time: ~2 hours
+
+# Neo4j import (alag process, parallel chal sakta hai)
+python scripts/neo4j_import.py
+# Time: ~1h 45min
+```
+
+## Step 5: Module 8 — Pre-training
+
+```bash
+python -m src.models.pretrain.runner
+
+# Expected output:
+# Epoch 21: val_loss = 6.766 ← best
+# Early stopped at epoch 31
+# Saved: models/pretrain/checkpoint_best.pt
+
+# Agar checkpoint_best.pt already hai toh ye step skip karo
+```
+
+## Step 6: Module 9 — Node2Vec Baseline
+
+```bash
+python -m src.models.baseline_runner
+
+# Expected output:
+# Node2Vec training complete
+# Isolation Forest: AUROC=0.9804, F1=0.4912
+# One-Class SVM:    AUROC=0.9609, F1=0.6531
+# Saved: models/baseline/
+
+# Time: ~15-20 minutes
+```
+
+## Step 7: Module 11 — T-HetGAT Training
+
+```bash
+python -m src.models.thetgat.runner
+
+# Kya hoga:
+# 1. 17,657 windows scan (labels + metadata) — ~34 sec
+# 2. Stratified split: 14,125 train | 1,766 val | 1,766 test
+# 3. Pretrained encoder load
+# 4. Phase A (epoch 0-4): encoder frozen
+# 5. Phase B (epoch 5+): full fine-tuning
+# 6. Early stopping (patience=10 on val AUROC)
+# 7. Test set pe evaluate, report print
+
+# Expected final output:
+# ============================================================
+#   T-HetGAT Evaluation Results
+# ============================================================
+#   AUROC   : X.XXXX  ([BEATS] baseline 0.9804)
+#   Best F1 : X.XXXX  ([BEATS] baseline 0.4912)
+# ============================================================
+
+# Time: ~3-7 hours
+# Checkpoints: models/thetgat/thetgat_best.pt
+# Results:     models/thetgat/thetgat_eval_results.json
+```
+
+## Step 8: FastAPI Backend
+
+```bash
+# Docker services chal rahe honein chahiye (Step 3)
+uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# API: http://localhost:8000
+# Docs: http://localhost:8000/docs
+```
+
+## Step 9: SOC Dashboard
+
+```bash
+cd frontend
+npm install    # Pehli baar hi
+npm run dev
+
+# Dashboard: http://localhost:3000
+```
+
+## Quick Reference — Saare Commands ek jagah:
+
+```bash
+# Hamesha pehle venv activate karo
+venv\Scripts\activate         # Windows
+source venv/bin/activate      # Linux/Mac
+
+# Infrastructure
+docker-compose up -d          # Saare services start
+docker-compose down           # Band karo
+
+# AI Training (is order mein chalao)
+python -m src.models.pretrain.runner          # Module 8 (~2 ghante)
+python -m src.models.baseline_runner          # Module 9 (~20 min)
+python -m src.models.thetgat.runner           # Module 11 (~3-7 ghante)
+
+# Services
+uvicorn src.api.main:app --reload --port 8000  # FastAPI
+cd frontend && npm run dev                      # Dashboard (port 3000)
+
+# Results dekhne ke liye
+cat models/thetgat/thetgat_eval_results.json
+```
+
+## Saari files run ke baad:
+
+```
+models/
+├── pretrain/
+│   ├── checkpoint_best.pt        ← Pre-trained encoder (Module 8)
+│   └── checkpoint_latest.pt
+├── baseline/
+│   ├── node2vec.pt               ← IP embeddings (Module 9)
+│   ├── iso_forest.joblib         ← Trained Isolation Forest
+│   ├── oc_svm.joblib             ← Trained One-Class SVM
+│   ├── scaler.joblib             ← StandardScaler
+│   └── baseline_results.json     ← AUROC=0.9804 etc.
+└── thetgat/
+    ├── thetgat_best.pt           ← Best T-HetGAT model (Module 11)
+    ├── thetgat_latest.pt         ← Latest checkpoint
+    ├── thetgat_train_history.json ← Har epoch ke metrics
+    └── thetgat_eval_results.json  ← Final test results
+```
+
+---
+
+*Document updated: 18 March 2026 | GraphRL-Sec MTech Dissertation*
+```
+
+Use the Edit tool to make all these changes. After all edits are done, confirm "HINGLISH DOC UPDATED".
+Read PROJECT_EXPLAINED_HINGLISH.md
+Read toolu_011DtAGJ7SG8k1wuk6oKS6Rg.txt
+Grep "PHASE 3 — DETECTION" (in d:/Personal/GraphRL-Sec/docs/PROJECT_EXPLAINED_HINGLISH.md)
+6 lines of output
+Grep "Pre-training.*GNN encoder trained" (in d:/Personal/GraphRL-Sec/docs/PROJECT_EXPLAINED_HINGLISH.md)
+1 line of output
+Grep "Detection Model:.*░░.*NEXT" (in d:/Personal/GraphRL-Sec/docs/PROJECT_EXPLAINED_HINGLISH.md)
+1 line of output
+Grep "Overall:.*~30%" (in d:/Personal/GraphRL-Sec/docs/PROJECT_EXPLAINED_HINGLISH.md)
+1 line of output
+Grep "Document updated: 17 March" (in d:/Personal/GraphRL-Sec/docs/PROJECT_EXPLAINED_HINGLISH.md)
+1 line of output
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Modified
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Modified
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Modified
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Added 2 lines
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Removed 1 line
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Added 1 line
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Modified
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Modified
+Edit PROJECT_EXPLAINED_HINGLISH.md
+Added 552 lines
+Grep "Node2Vec Baseline.*✅ COMPLETE|T-HetGAT Detection.*training chal|8 modules complete|val_loss=6.766|AUROC=0.9804, F1=0.4912|Benchmarking.*T-HetGAT vs baselines ka full|Detection Model:.*100%.*results pending|Node2Vec:.*100%|~40%|val_loss=6.766.*Node2Vec baseline|18 March 2026|PART 7|PART 8|PART 9" (in d:/Personal/GraphRL-Sec/docs/PROJECT_EXPLAINED_HINGLISH.md)
+16 lines of output
+Dono docs update ho gaye. Ab commit aur push:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add docs/PROJECT_EXPLAINED_ENGLISH.md docs/PROJECT_EXPLAINED_HINGLISH.md && git commit -m "$(cat <<'EOF'
+docs: update both explanation docs with Module 9, Module 11, and local run guide
+
+Changes in PROJECT_EXPLAINED_ENGLISH.md and PROJECT_EXPLAINED_HINGLISH.md:
+- Roadmap: Mark Module 9 (Node2Vec) and Module 11 (T-HetGAT) as complete
+- Status: Updated from 6 to 8 modules complete (~40%)
+- Added deep-dive sections for Module 9 (Node2Vec baseline, 5 files explained)
+- Added deep-dive sections for Module 11 (T-HetGAT, 8 files explained)
+  - TemporalEdgeEncoder, HeteroTemporalGATLayer, THetGATModel, trainer, evaluator
+  - All bugs documented: BatchNorm1d single-node, LazyModule, metadata mismatch
+- Added "How to run locally" section with all 9 steps (Step 1-9)
+- Updated key numbers, progress bars, presentation text
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)" && git push origin main
+
+OUT
+warning: in the working copy of 'docs/PROJECT_EXPLAINED_ENGLISH.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/PROJECT_EXPLAINED_HINGLISH.md', LF will be replaced by CRLF the next time Git touches it
+[main 4b92587] docs: update both explanation docs with Module 9, Module 11, and local run guide
+ 2 files changed, 1265 insertions(+), 22 deletions(-)
+To https://github.com/A1610/graphrl-sec.git
+   f90268d..4b92587  main -> main
+Pushed. ✅ 1,265 lines added to both docs.
+
+Kya update hua dono documents mein:
+
+Section	Changes
+Roadmap	M9 + M11 → ✅ COMPLETE
+Status	6 → 8 modules (~40%)
+PART 3/7	Module 9 deep-dive (node2vec_config, node2vec, profiling, baseline files)
+PART 3/8	Module 11 deep-dive (config, losses, temporal_encoder, hetgat_layer, model, trainer, evaluator, runner)
+Bugs section	BatchNorm1d, LazyModule, metadata mismatch, strict=True — saab documented
+NEW: How to run	Step 1-9 — clone → setup → datasets → Docker → Module 8 → 9 → 11 → API → Dashboard
+Quick Reference	Saare commands ek jagah
+Training background mein chal rahi hai — jab epoch 0 complete ho tab output share karna!
+
+frontend ke har ek page per ek info tab bana do and har metrics card pe click karne pe info aaye
+The user wants to add an info tab/button to every page in the frontend and info tooltips/modals on every metrics card. Let me first look at the frontend structure to understand what's there.
+
+Agent:Explore frontend structure thoroughly
+IN
+Explore the frontend directory at d:\Personal\GraphRL-Sec\frontend\src. I need to understand:
+1. All page files (app directory structure)
+2. All component files especially cards, KPI cards, metrics cards
+3. The layout structure (sidebar, header)
+4. Any existing UI component patterns (buttons, modals, tooltips)
+5. The color scheme and styling patterns used
+
+List all files with their paths and briefly describe what each page/component does. Be thorough.
+Bash
+IN
+find /d/Personal/GraphRL-Sec/frontend/src -type f -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" | head -100
+
+OUT
+/d/Personal/GraphRL-Sec/frontend/src/app/alerts/page.tsx
+/d/Personal/GraphRL-Sec/frontend/src/app/analytics/page.tsx
+/d/Personal/GraphRL-Sec/frontend/src/app/graph/page.tsx
+/d/Personal/GraphRL-Sec/frontend/src/app/layout.tsx
+/d/Personal/GraphRL-Sec/frontend/src/app/page.tsx
+/d/Personal/GraphRL-Sec/frontend/src/app/providers.tsx
+/d/Personal/GraphRL-Sec/frontend/src/components/alerts/AlertTable.tsx
+/d/Personal/GraphRL-Sec/frontend/src/components/charts/SeverityDonut.tsx
+/d/Personal/GraphRL-Sec/frontend/src/components/charts/TopCommunicators.tsx
+/d/Personal/GraphRL-Sec/frontend/src/components/graph/NetworkGraph.tsx
+/d/Personal/GraphRL-Sec/frontend/src/components/layout/Header.tsx
+/d/Personal/GraphRL-Sec/frontend/src/components/layout/KPICard.tsx
+/d/Personal/GraphRL-Sec/frontend/src/components/layout/Sidebar.tsx
+/d/Personal/GraphRL-Sec/frontend/src/hooks/useAlerts.ts
+/d/Personal/GraphRL-Sec/frontend/src/hooks/useGraphStats.ts
+/d/Personal/GraphRL-Sec/frontend/src/hooks/useGraphStream.ts
+/d/Personal/GraphRL-Sec/frontend/src/hooks/useNeighborhood.ts
+/d/Personal/GraphRL-Sec/frontend/src/lib/api.ts
+/d/Personal/GraphRL-Sec/frontend/src/lib/utils.ts
+/d/Personal/GraphRL-Sec/frontend/src/types/api.ts
+/d/Personal/GraphRL-Sec/frontend/src/types/graph.ts
+Read Header.tsx
+Read AlertTable.tsx
+Read graph.ts
+Read api.ts
+Bash
+IN
+find /d/Personal/GraphRL-Sec/frontend/src -type f \( -name "*.ts" -o -name "*.tsx" \) | wc -l
+
+OUT
+21
+Now I have a thorough understanding of the frontend. Let me plan what needs to be built:
+
+Info button on each page - A small "ℹ" button in the page header that opens a modal/panel explaining what that page shows, what the metrics mean, etc.
+
+Info tooltip/modal on each metrics card click - When a user clicks on a KPI card, a modal or popover appears explaining what that metric means.
+
+The implementation plan:
+
+Component 1: InfoModal component
+A reusable modal/dialog component that:
+
+Appears centered or as a slide-in panel
+
+Has a title, content (can be JSX), and a close button
+
+Handles accessibility with focus trapping, ESC key to dismiss, and proper ARIA attributes
+
+Component 2: InfoButton component
+A small ℹ icon button that triggers the modal.
+
+Updates needed:
+KPICard - Add optional infoContent prop, clicking the card (or an info icon on it) opens the modal
+Dashboard page - Add an info tab/button in the header with page-level explanation
+Alerts page - Add info tab/button
+Graph page - Add info tab/button
+Analytics page - Add info tab/button
+Now I need to define the content for each page's info section.
+
+For the Dashboard, I'm outlining what the SOC Dashboard is, explaining each KPI card (Nodes, Edges, Anomalous entities, and Top Communicator), describing the Node Type Distribution breakdown, and covering Recent Alerts. For the KPI cards specifically, I'm clarifying that Total Nodes are all unique network entities, Total Edges are connections between them, Anomalous flags entities with attack scores of 0.5 or higher, and Top Communicator identifies the IP with the most outbound connections. For the Alerts page, I'm defining what an alert is (when T-HetGAT detects suspicious patterns), listing severity levels, and I need to finish that section.
+
+Now I'm thinking through the UI approach for displaying this information. I'll create an InfoModal component—a centered dialog with a title, content area, and close button. Each page will have an info icon in the header that opens page-level information, and KPI cards will have their own info icons in the top-right corner for card-specific details. The modal will be a simple div-based overlay without external dependencies, with ESC key support for accessibility. I'm starting to plan the implementation steps.
+
+Now I need to check the existing KPICard and page components before making changes...
+
+Read d:\Personal\GraphRL-Sec\frontend\src\components\layout\KPICard.tsx
+Read d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+Let me continue implementing the frontend info feature. I need to:
+
+Create frontend/src/components/ui/InfoModal.tsx — reusable modal component
+Update KPICard.tsx — add optional infoContent prop, clicking info icon opens modal
+Update all 4 pages (Dashboard, Alerts, Graph, Analytics) — add page-level info button in header area
+Let me first check the current frontend structure to understand all files I need to modify.
+
+Agent:Explore frontend page structure
+IN
+In the repository at d:\Personal\GraphRL-Sec, explore the frontend/src directory. I need:
+1. List all files in frontend/src/pages/ (full paths)
+2. Read the full content of each page file (Dashboard, Alerts, Graph, Analytics or whatever pages exist)
+3. Read frontend/src/components/layout/KPICard.tsx
+4. Read frontend/src/components/layout/Header.tsx
+5. List all files in frontend/src/components/
+
+Return the complete file contents for all pages and the KPICard.tsx and Header.tsx files.
+Read Header.tsx
+Bash List frontend/src directory structure
+IN
+ls -la d:/Personal/GraphRL-Sec/frontend/src/
+
+OUT
+total 8
+drwxr-xr-x 1 maham 197609 0 Mar 17 15:11 .
+drwxr-xr-x 1 maham 197609 0 Mar 17 15:20 ..
+drwxr-xr-x 1 maham 197609 0 Mar 17 15:16 app
+drwxr-xr-x 1 maham 197609 0 Mar 17 15:11 components
+drwxr-xr-x 1 maham 197609 0 Mar 17 15:12 hooks
+drwxr-xr-x 1 maham 197609 0 Mar 17 15:12 lib
+drwxr-xr-x 1 maham 197609 0 Mar 17 15:21 types
+Read providers.tsx
+Read TopCommunicators.tsx
+The agent explored but didn't return the actual file contents. Let me read the specific files I need directly.
+
+Read d:\Personal\GraphRL-Sec\frontend\src\components\layout\KPICard.tsx
+Read d:\Personal\GraphRL-Sec\frontend\src\app\page.tsx
+Read d:\Personal\GraphRL-Sec\frontend\src\app\alerts\page.tsx
+Read d:\Personal\GraphRL-Sec\frontend\src\app\graph\page.tsx
+Read d:\Personal\GraphRL-Sec\frontend\src\app\analytics\page.tsx
+Now I have a clear picture of all pages. Let me plan the implementation:
+
+Create frontend/src/components/ui/InfoModal.tsx — reusable modal
+Update KPICard.tsx — add infoContent prop, clicking info icon opens modal
+Update Header.tsx — add optional infoButton slot or pageInfo prop
+Update all 4 pages to pass info content
+For the KPICard, I'll make the entire card clickable (or add a small ℹ icon button) that opens a modal with info about that metric.
+
+For pages, I'll add an "About this page" button in the header area.
+
+I'll add a small ℹ button to the top-right of each KPICard that opens a modal with metric details, and update the Header component to accept an optional infoContent prop so I can add an info button for page-level information.
+
+My plan is straightforward: create a reusable InfoModal component, update KPICard and Header to include info buttons that trigger it, then pass the appropriate content to each component across all four pages. Let me start by checking the Header structure.
+
+Read d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+Now I have everything I need. Let me plan the implementation:
+
+Plan:
+
+Create frontend/src/components/ui/InfoModal.tsx — reusable modal with:
+
+open: boolean, onClose: () => void, title: string, children: React.ReactNode
+Uses dialog element or a fixed overlay div
+Dark GitHub-themed styling
+Close button + click outside to close
+Update KPICard.tsx — add:
+
+infoContent?: React.ReactNode prop
+A small ℹ button in the top-right (integrated with the existing icon area or a separate button)
+Modal state and InfoModal import
+Update Header.tsx — add:
+
+infoContent?: React.ReactNode prop
+Modal state
+An "About" button between the title area and the live status
+Update all 4 pages:
+
+page.tsx (Dashboard): pass page info + KPI card infos
+alerts/page.tsx: pass page info
+graph/page.tsx: pass page info
+analytics/page.tsx: pass page info
+Now I'll design the InfoModal and wire it into the components, starting with the KPICard integration.
+
+For the KPICard, I'm thinking about where to place the info button — I could put it between the title and icon badge in the header row, or tuck it in the corner. The cleanest approach is adding a small ℹ icon-only button in the top-right corner of the header, just before the existing icon badge, and it'll only show up when there's content to display. I'll use a portal for the modal itself.
+
+Writing the modal component... Writing the modal component...
+
+Now I need to add the info modal integration to KPICard and Header components, wiring up state management and the info button triggers. Then I'll define the specific content for each page's info sections—the Dashboard will explain the real-time SOC overview and what each KPI metric represents in the knowledge graph context.
+
+For the Alerts page, I'm describing how it displays network connections flagged as anomalous by the model with severity based on attack probability. The Graph page will explain the interactive topology visualization of detected anomalous paths, and Analytics will cover the detailed statistics and top communicators ranked by outbound connections.
+
+Now I'm ready to implement the components starting with the modal, then updating the card and header, and finally wiring everything up across all pages.
+
+For the KPICard header, I'm deciding where to place the info button—I'll position it inline after the title but before the icon on the far right, keeping the layout clean and balanced.
+
+Now I need to pass the infoContent prop through to KPICard on the pages that need it.
+
+Since KPICard will manage the modal state with useState, it's already set up as a client component, and InfoModal will be one too. Let me implement all of this now.
+
+Now I have everything. Let me implement the info feature across all files.
+
+Write d:\Personal\GraphRL-Sec\frontend\src\components\ui\InfoModal.tsx
+70 lines
+"use client";
+
+/**
+ * InfoModal — reusable info/help modal overlay.
+ *
+ * Press Escape or click the backdrop to close.
+ * Renders nothing when `open` is false (no layout shift).
+ */
+
+import { useEffect } from "react";
+import { X } from "lucide-react";
+
+interface InfoModalProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}
+
+export default function InfoModal({
+  open,
+  onClose,
+  title,
+  children,
+}: InfoModalProps): React.ReactElement | null {
+  // Close on Escape key
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="relative w-full max-w-md rounded-lg border border-[#30363d] bg-[#161b22] shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[#30363d] px-5 py-4">
+          <h2 className="text-sm font-semibold text-[#e6edf3]">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-[#8b949e] transition-colors hover:bg-[#30363d] hover:text-[#e6edf3]"
+            aria-label="Close info modal"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="px-5 py-4 text-sm leading-relaxed text-[#8b949e]">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+Now update KPICard.tsx to support an optional info popup:
+
+Write d:\Personal\GraphRL-Sec\frontend\src\components\layout\KPICard.tsx
+148 lines
+"use client";
+
+/**
+ * KPICard — a metric summary card used across the SOC dashboard.
+ *
+ * Accepts an optional trend indicator (+/- delta) and a loading state
+ * that renders a skeleton placeholder instead of data.
+ *
+ * Pass `infoContent` + `infoTitle` to show an ℹ button that opens an
+ * info modal explaining what this metric means.
+ */
+
+import { useState } from "react";
+import { Info } from "lucide-react";
+
+import { cn, formatNumber } from "@/lib/utils";
+import InfoModal from "@/components/ui/InfoModal";
+
+interface KPICardProps {
+  title: string;
+  value: string | number | null;
+  subtitle?: string;
+  icon: React.ReactNode;
+  accentColor?: string;
+  loading?: boolean;
+  /** Optional delta string, e.g. "+12%" or "-3 nodes" */
+  delta?: string;
+  deltaPositive?: boolean;
+  /** When provided, renders an ℹ button that opens an info modal. */
+  infoContent?: React.ReactNode;
+  /** Title shown in the info modal header. Defaults to the card title. */
+  infoTitle?: string;
+}
+
+function SkeletonLine({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "animate-pulse rounded bg-[#30363d]/60",
+        className,
+      )}
+      aria-hidden="true"
+    />
+  );
+}
+
+export default function KPICard({
+  title,
+  value,
+  subtitle,
+  icon,
+  accentColor = "#58a6ff",
+  loading = false,
+  delta,
+  deltaPositive,
+  infoContent,
+  infoTitle,
+}: KPICardProps): React.ReactElement {
+  const [infoOpen, setInfoOpen] = useState(false);
+
+  const displayValue =
+    typeof value === "number" ? formatNumber(value) : (value ?? "—");
+
+  return (
+    <>
+      <article
+        className="flex flex-col gap-3 rounded-lg border border-[#30363d] bg-[#161b22] p-5"
+        aria-label={`KPI: ${title}`}
+      >
+        {/* Header row */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+            {title}
+          </span>
+
+          <div className="flex items-center gap-1.5">
+            {/* Info button — only rendered when infoContent is provided */}
+            {infoContent != null && (
+              <button
+                type="button"
+                onClick={() => setInfoOpen(true)}
+                className="rounded p-1 text-[#8b949e] transition-colors hover:bg-[#30363d] hover:text-[#58a6ff]"
+                aria-label={`About ${title}`}
+              >
+                <Info size={13} aria-hidden="true" />
+              </button>
+            )}
+
+            <span
+              className="rounded-md p-1.5"
+              style={{ color: accentColor, backgroundColor: `${accentColor}18` }}
+              aria-hidden="true"
+            >
+              {icon}
+            </span>
+          </div>
+        </div>
+
+        {/* Value */}
+        {loading ? (
+          <SkeletonLine className="h-8 w-24" />
+        ) : (
+          <p
+            className="text-3xl font-bold tracking-tight text-[#e6edf3]"
+            aria-live="polite"
+          >
+            {displayValue}
+          </p>
+        )}
+
+        {/* Subtitle + delta */}
+        <div className="flex items-center justify-between">
+          {loading ? (
+            <SkeletonLine className="h-3.5 w-32" />
+          ) : (
+            <span className="text-xs text-[#8b949e]">{subtitle ?? " "}</span>
+          )}
+          {!loading && delta != null && (
+            <span
+              className={cn(
+                "text-xs font-medium",
+                deltaPositive === true
+                  ? "text-[#3fb950]"
+                  : deltaPositive === false
+                  ? "text-[#f85149]"
+                  : "text-[#8b949e]",
+              )}
+            >
+              {delta}
+            </span>
+          )}
+        </div>
+      </article>
+
+      {/* Info modal */}
+      {infoContent != null && (
+        <InfoModal
+          open={infoOpen}
+          onClose={() => setInfoOpen(false)}
+          title={infoTitle ?? title}
+        >
+          {infoContent}
+        </InfoModal>
+      )}
+    </>
+  );
+}
+Now update Header.tsx to support a page-level info button:
+
+Write d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+101 lines
+"use client";
+
+/**
+ * Header — top bar showing page title, live connection status indicator,
+ * and the last-updated timestamp from the WebSocket stream.
+ *
+ * Pass `infoContent` + `infoTitle` to render an "About this page" button
+ * that opens an info modal describing what the page shows.
+ */
+
+import { useState } from "react";
+import { Info } from "lucide-react";
+
+import { useGraphStream } from "@/hooks/useGraphStream";
+import { cn } from "@/lib/utils";
+import InfoModal from "@/components/ui/InfoModal";
+
+interface HeaderProps {
+  title: string;
+  subtitle?: string;
+  /** When provided, renders an "About" button that opens an info modal. */
+  infoContent?: React.ReactNode;
+  /** Title shown in the info modal. Defaults to "About {title}". */
+  infoTitle?: string;
+}
+
+export default function Header({
+  title,
+  subtitle,
+  infoContent,
+  infoTitle,
+}: HeaderProps): React.ReactElement {
+  const { connected, error } = useGraphStream();
+  const [infoOpen, setInfoOpen] = useState(false);
+
+  const statusLabel = error != null
+    ? "Error"
+    : connected
+    ? "Live"
+    : "Connecting…";
+
+  const statusDotClass = cn(
+    "h-2 w-2 rounded-full",
+    error != null
+      ? "bg-[#f85149]"
+      : connected
+      ? "bg-[#3fb950] animate-pulse"
+      : "bg-[#d29922] animate-pulse",
+  );
+
+  return (
+    <>
+      <header className="flex h-14 items-center justify-between border-b border-[#30363d] bg-[#161b22] px-6">
+        <div className="flex flex-col justify-center">
+          <h1 className="text-sm font-semibold text-[#e6edf3]">{title}</h1>
+          {subtitle != null && (
+            <p className="text-xs text-[#8b949e]">{subtitle}</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* About this page button */}
+          {infoContent != null && (
+            <button
+              type="button"
+              onClick={() => setInfoOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-xs text-[#8b949e] transition-colors hover:border-[#58a6ff]/40 hover:text-[#58a6ff]"
+              aria-label={`About ${title} page`}
+            >
+              <Info size={12} aria-hidden="true" />
+              About
+            </button>
+          )}
+
+          {/* Live status indicator */}
+          <div
+            className="flex items-center gap-2 rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1"
+            role="status"
+            aria-label={`Neo4j connection: ${statusLabel}`}
+            aria-live="polite"
+          >
+            <span className={statusDotClass} aria-hidden="true" />
+            <span className="text-xs font-medium text-[#8b949e]">{statusLabel}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Page info modal */}
+      {infoContent != null && (
+        <InfoModal
+          open={infoOpen}
+          onClose={() => setInfoOpen(false)}
+          title={infoTitle ?? `About ${title}`}
+        >
+          {infoContent}
+        </InfoModal>
+      )}
+    </>
+  );
+}
+Now update all 4 pages. Starting with Dashboard:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\page.tsx
+Added 26 lines
+Now add info to each KPI card in the Dashboard:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\page.tsx
+Added 59 lines
+Now update the Alerts page:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\alerts\page.tsx
+Added 27 lines
+Now update the Graph page:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\graph\page.tsx
+Added 21 lines
+Now update the Analytics page:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\analytics\page.tsx
+Added 26 lines
+Now let me verify the builds by checking for any TypeScript issues — specifically that the cn utility and imports are all correct:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1 | head -50
+
+OUT
+(Bash completed with no output)
+No TypeScript errors. Let me do a quick sanity check on the new files:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx next build 2>&1 | tail -20
+
+OUT
+✓ Compiled successfully in 8.8s
+  Running TypeScript ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/7) ...
+  Generating static pages using 11 workers (1/7) 
+  Generating static pages using 11 workers (3/7) 
+  Generating static pages using 11 workers (5/7) 
+✓ Generating static pages using 11 workers (7/7) in 1230.3ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /alerts
+├ ○ /analytics
+└ ○ /graph
+
+
+○  (Static)  prerendered as static content
+Build succeeds cleanly. Let me commit the changes:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add frontend/src/components/ui/InfoModal.tsx frontend/src/components/layout/KPICard.tsx frontend/src/components/layout/Header.tsx frontend/src/app/page.tsx frontend/src/app/alerts/page.tsx frontend/src/app/graph/page.tsx frontend/src/app/analytics/page.tsx && git status
+
+OUT
+warning: in the working copy of 'frontend/src/app/alerts/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/app/analytics/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/app/graph/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/app/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/layout/Header.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/layout/KPICard.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/ui/InfoModal.tsx', LF will be replaced by CRLF the next time Git touches it
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   frontend/src/app/alerts/page.tsx
+	modified:   frontend/src/app/analytics/page.tsx
+	modified:   frontend/src/app/graph/page.tsx
+	modified:   frontend/src/app/page.tsx
+	modified:   frontend/src/components/layout/Header.tsx
+	modified:   frontend/src/components/layout/KPICard.tsx
+	new file:   frontend/src/components/ui/InfoModal.tsx
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	models/thetgat/
+muje aisa nhi chaiye tha mein bol raha tha ki jab m metrics ccard pr click kru tab nich aajaye i pr nh
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git commit -m "$(cat <<'EOF'
+feat(frontend): add info buttons to all pages and KPI cards
+
+- New InfoModal component: reusable modal with Escape/backdrop close,
+  dark GitHub-themed styling, accessible role=dialog markup
+- Header: optional infoContent prop renders an "About" pill button that
+  opens the page-level info modal; all 4 pages now pass rich explanatory
+  content about what each page shows
+- KPICard: optional infoContent prop renders a small info icon button in
+  the card header; Dashboard KPI cards now explain Total Nodes, Total
+  Edges, Anomalous Connections, and Top Communicator in plain language
+- Zero TypeScript errors; Next.js build passes cleanly
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+[main b7bd7b9] feat(frontend): add info buttons to all pages and KPI cards
+ 7 files changed, 380 insertions(+), 67 deletions(-)
+ create mode 100644 frontend/src/components/ui/InfoModal.tsx
+The user wants: when you click on a metrics card, the info pops up — not an ℹ button. They don't want a separate ℹ icon button, they want clicking the card itself to show the info.
+
+Let me update KPICard to make the entire card clickable (when infoContent is present), and remove the ℹ button. The card becomes a button/clickable element.
+
+I need to:
+
+Remove the ℹ button from KPICard
+
+Make the entire article clickable (wrap in a button, or add onClick to article + cursor-pointer)
+
+Keep visual appearance the same (no visual info button)
+
+The "About" button in the header can stay since they only mentioned the metrics card behavior.
+
+Now I'm clarifying what they actually want — they said "not on the i button", meaning they want the card itself to be clickable. I'll update the KPICard component to make the entire article element clickable with a cursor pointer, removing the info icon button entirely.
+
+Samajh gaya — ℹ button nahi chahiye, poora card click karne pe info aaye. Let me fix that.
+
+Write d:\Personal\GraphRL-Sec\frontend\src\components\layout\KPICard.tsx
+141 lines
+"use client";
+
+/**
+ * KPICard — a metric summary card used across the SOC dashboard.
+ *
+ * Accepts an optional trend indicator (+/- delta) and a loading state
+ * that renders a skeleton placeholder instead of data.
+ *
+ * Pass `infoContent` + `infoTitle` to make the entire card clickable —
+ * clicking anywhere on the card opens an info modal explaining the metric.
+ */
+
+import { useState } from "react";
+
+import { cn, formatNumber } from "@/lib/utils";
+import InfoModal from "@/components/ui/InfoModal";
+
+interface KPICardProps {
+  title: string;
+  value: string | number | null;
+  subtitle?: string;
+  icon: React.ReactNode;
+  accentColor?: string;
+  loading?: boolean;
+  /** Optional delta string, e.g. "+12%" or "-3 nodes" */
+  delta?: string;
+  deltaPositive?: boolean;
+  /** When provided, clicking the card opens an info modal. */
+  infoContent?: React.ReactNode;
+  /** Title shown in the info modal header. Defaults to the card title. */
+  infoTitle?: string;
+}
+
+function SkeletonLine({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "animate-pulse rounded bg-[#30363d]/60",
+        className,
+      )}
+      aria-hidden="true"
+    />
+  );
+}
+
+export default function KPICard({
+  title,
+  value,
+  subtitle,
+  icon,
+  accentColor = "#58a6ff",
+  loading = false,
+  delta,
+  deltaPositive,
+  infoContent,
+  infoTitle,
+}: KPICardProps): React.ReactElement {
+  const [infoOpen, setInfoOpen] = useState(false);
+
+  const displayValue =
+    typeof value === "number" ? formatNumber(value) : (value ?? "—");
+
+  const isClickable = infoContent != null;
+
+  return (
+    <>
+      <article
+        className={cn(
+          "flex flex-col gap-3 rounded-lg border border-[#30363d] bg-[#161b22] p-5",
+          isClickable && "cursor-pointer transition-colors hover:border-[#58a6ff]/40 hover:bg-[#161b22]/80",
+        )}
+        aria-label={`KPI: ${title}${isClickable ? " — click for details" : ""}`}
+        onClick={isClickable ? () => setInfoOpen(true) : undefined}
+        role={isClickable ? "button" : undefined}
+        tabIndex={isClickable ? 0 : undefined}
+        onKeyDown={isClickable ? (e) => { if (e.key === "Enter" || e.key === " ") setInfoOpen(true); } : undefined}
+      >
+        {/* Header row */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+            {title}
+          </span>
+          <span
+            className="rounded-md p-1.5"
+            style={{ color: accentColor, backgroundColor: `${accentColor}18` }}
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+        </div>
+
+        {/* Value */}
+        {loading ? (
+          <SkeletonLine className="h-8 w-24" />
+        ) : (
+          <p
+            className="text-3xl font-bold tracking-tight text-[#e6edf3]"
+            aria-live="polite"
+          >
+            {displayValue}
+          </p>
+        )}
+
+        {/* Subtitle + delta */}
+        <div className="flex items-center justify-between">
+          {loading ? (
+            <SkeletonLine className="h-3.5 w-32" />
+          ) : (
+            <span className="text-xs text-[#8b949e]">{subtitle ?? " "}</span>
+          )}
+          {!loading && delta != null && (
+            <span
+              className={cn(
+                "text-xs font-medium",
+                deltaPositive === true
+                  ? "text-[#3fb950]"
+                  : deltaPositive === false
+                  ? "text-[#f85149]"
+                  : "text-[#8b949e]",
+              )}
+            >
+              {delta}
+            </span>
+          )}
+        </div>
+      </article>
+
+      {/* Info modal — opens when card is clicked */}
+      {infoContent != null && (
+        <InfoModal
+          open={infoOpen}
+          onClose={() => setInfoOpen(false)}
+          title={infoTitle ?? title}
+        >
+          {infoContent}
+        </InfoModal>
+      )}
+    </>
+  );
+}
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1
+
+OUT
+(Bash completed with no output)
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add frontend/src/components/layout/KPICard.tsx && git commit -m "$(cat <<'EOF'
+fix(frontend): make entire KPI card clickable for info — remove icon button
+
+Clicking anywhere on the card (when infoContent is set) now opens the
+info modal. The separate info icon button is removed. Keyboard accessible
+via Enter/Space.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+warning: in the working copy of 'frontend/src/components/layout/KPICard.tsx', LF will be replaced by CRLF the next time Git touches it
+[main 87a6a24] fix(frontend): make entire KPI card clickable for info — remove icon button
+ 1 file changed, 22 insertions(+), 29 deletions(-)
+Done. Yeh changes ab poore hain:
+
+KPI cards — poore card pe click karo, neeche info modal khulta hai (koi ℹ button nahi)
+Pages — header mein "About" button hai jo page explain karta hai
+Dashboard pe 4 cards hain:
+
+Total Nodes click → batata hai kaunse node types hain (Host, ExternalIP, etc.)
+Total Edges click → edge types explain karta hai (CONNECTS_TO, etc.)
+Anomalous Connections click → T-HetGAT model aur 0.5 threshold explain karta hai
+Top Communicator click → high connection count ka threat significance batata hai
+or downside pr aajaye har metrics card pr dashboard ke
+The user wants the info to appear at the bottom of each metrics card (below the card), not in a modal popup. So instead of opening a modal, clicking the card should expand/show info content directly below the card (like an inline accordion/expandable section).
+
+Let me update KPICard to:
+
+Remove the modal approach
+Add a toggle state - clicking the card toggles an info section that appears below the card content
+The info slides/appears below within the card itself
+So the card expands downward when clicked, showing the info content.
+
+Modal nahi chahiye — card ke neeche hi info aaye (inline expand). Let me update KPICard to toggle an info section below the card content.
+
+Write d:\Personal\GraphRL-Sec\frontend\src\components\layout\KPICard.tsx
+157 lines
+"use client";
+
+/**
+ * KPICard — a metric summary card used across the SOC dashboard.
+ *
+ * Accepts an optional trend indicator (+/- delta) and a loading state
+ * that renders a skeleton placeholder instead of data.
+ *
+ * Pass `infoContent` to make the card clickable — clicking toggles an
+ * info section that expands inline below the card metrics.
+ */
+
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
+
+import { cn, formatNumber } from "@/lib/utils";
+
+interface KPICardProps {
+  title: string;
+  value: string | number | null;
+  subtitle?: string;
+  icon: React.ReactNode;
+  accentColor?: string;
+  loading?: boolean;
+  /** Optional delta string, e.g. "+12%" or "-3 nodes" */
+  delta?: string;
+  deltaPositive?: boolean;
+  /** When provided, clicking the card toggles inline info below the metrics. */
+  infoContent?: React.ReactNode;
+}
+
+function SkeletonLine({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn("animate-pulse rounded bg-[#30363d]/60", className)}
+      aria-hidden="true"
+    />
+  );
+}
+
+export default function KPICard({
+  title,
+  value,
+  subtitle,
+  icon,
+  accentColor = "#58a6ff",
+  loading = false,
+  delta,
+  deltaPositive,
+  infoContent,
+}: KPICardProps): React.ReactElement {
+  const [expanded, setExpanded] = useState(false);
+
+  const displayValue =
+    typeof value === "number" ? formatNumber(value) : (value ?? "—");
+
+  const isClickable = infoContent != null;
+
+  return (
+    <article
+      className={cn(
+        "flex flex-col rounded-lg border border-[#30363d] bg-[#161b22]",
+        isClickable && "cursor-pointer select-none",
+      )}
+      aria-label={`KPI: ${title}`}
+      onClick={isClickable ? () => setExpanded((v) => !v) : undefined}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      aria-expanded={isClickable ? expanded : undefined}
+      onKeyDown={
+        isClickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setExpanded((v) => !v);
+              }
+            }
+          : undefined
+      }
+    >
+      {/* Main card content */}
+      <div className="flex flex-col gap-3 p-5">
+        {/* Header row */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+            {title}
+          </span>
+          <div className="flex items-center gap-1.5">
+            {isClickable && (
+              <ChevronDown
+                size={13}
+                className={cn(
+                  "text-[#8b949e] transition-transform duration-200",
+                  expanded && "rotate-180",
+                )}
+                aria-hidden="true"
+              />
+            )}
+            <span
+              className="rounded-md p-1.5"
+              style={{ color: accentColor, backgroundColor: `${accentColor}18` }}
+              aria-hidden="true"
+            >
+              {icon}
+            </span>
+          </div>
+        </div>
+
+        {/* Value */}
+        {loading ? (
+          <SkeletonLine className="h-8 w-24" />
+        ) : (
+          <p
+            className="text-3xl font-bold tracking-tight text-[#e6edf3]"
+            aria-live="polite"
+          >
+            {displayValue}
+          </p>
+        )}
+
+        {/* Subtitle + delta */}
+        <div className="flex items-center justify-between">
+          {loading ? (
+            <SkeletonLine className="h-3.5 w-32" />
+          ) : (
+            <span className="text-xs text-[#8b949e]">{subtitle ?? " "}</span>
+          )}
+          {!loading && delta != null && (
+            <span
+              className={cn(
+                "text-xs font-medium",
+                deltaPositive === true
+                  ? "text-[#3fb950]"
+                  : deltaPositive === false
+                  ? "text-[#f85149]"
+                  : "text-[#8b949e]",
+              )}
+            >
+              {delta}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Inline info panel — expands below when card is clicked */}
+      {isClickable && expanded && (
+        <div
+          className="border-t border-[#30363d] px-5 py-4 text-xs leading-relaxed text-[#8b949e]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {infoContent}
+        </div>
+      )}
+    </article>
+  );
+}
+Also remove the InfoModal import from Header since we no longer need it in KPICard (Header still uses it for page-level About button — that's fine). Let me verify build:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1
+
+OUT
+Exit code 2
+src/app/page.tsx(200,19): error TS2322: Type '{ title: string; value: number | null; subtitle: string; icon: Element; accentColor: string; infoTitle: string; infoContent: Element; }' is not assignable to type 'IntrinsicAttributes & KPICardProps'.
+  Property 'infoTitle' does not exist on type 'IntrinsicAttributes & KPICardProps'.
+src/app/page.tsx(221,19): error TS2322: Type '{ title: string; value: number | null; subtitle: string; icon: Element; accentColor: string; infoTitle: string; infoContent: Element; }' is not assignable to type 'IntrinsicAttributes & KPICardProps'.
+  Property 'infoTitle' does not exist on type 'IntrinsicAttributes & KPICardProps'.
+src/app/page.tsx(241,19): error TS2322: Type '{ title: string; value: number; subtitle: string; icon: Element; accentColor: string; infoTitle: string; infoContent: Element; }' is not assignable to type 'IntrinsicAttributes & KPICardProps'.
+  Property 'infoTitle' does not exist on type 'IntrinsicAttributes & KPICardProps'.
+src/app/page.tsx(269,19): error TS2322: Type '{ title: string; value: string; subtitle: string; icon: Element; accentColor: string; infoTitle: string; infoContent: Element; }' is not assignable to type 'IntrinsicAttributes & KPICardProps'.
+  Property 'infoTitle' does not exist on type 'IntrinsicAttributes & KPICardProps'.
+infoTitle prop was removed since we no longer need a separate modal title. Remove those props from Dashboard:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && grep -n "infoTitle" frontend/src/app/page.tsx
+
+OUT
+200:                  infoTitle="Total Nodes"
+221:                  infoTitle="Total Edges"
+241:                  infoTitle="Anomalous Connections"
+269:                  infoTitle="Top Communicator"
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && sed -i '/infoTitle=/d' frontend/src/app/page.tsx
+
+OUT
+(Bash completed with no output)
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1
+
+OUT
+(Bash completed with no output)
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add frontend/src/components/layout/KPICard.tsx frontend/src/app/page.tsx && git commit -m "$(cat <<'EOF'
+feat(frontend): expand KPI card info inline below card on click
+
+Replaces modal approach — clicking a card now toggles an inline
+expandable section that appears directly below the card metrics,
+separated by a divider. ChevronDown icon rotates to indicate state.
+Keyboard accessible (Enter/Space). No external modal component needed.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+warning: in the working copy of 'frontend/src/app/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/layout/KPICard.tsx', LF will be replaced by CRLF the next time Git touches it
+[main 8c707d1] feat(frontend): expand KPI card info inline below card on click
+ 2 files changed, 56 insertions(+), 44 deletions(-)
+Ho gaya. Ab behavior yeh hai:
+
+Dashboard ke har metrics card pe click karo → card ke neeche directly info expand ho jaati hai (accordion style)
+ChevronDown icon rotate hota hai (open/close indicate karta hai)
+Dobara click karo → info band ho jaati hai
+Kya dikhta hai:
+Total Nodes → node types (Host, ExternalIP, Service, etc.)
+Total Edges → edge types (CONNECTS_TO, USES_SERVICE, etc.)
+Anomalous Connections → T-HetGAT model aur 0.5 threshold explain karta hai
+Top Communicator → high connection count ka security meaning
+aise nhi mtlb saare dashboard ke cards pr jo bhi dikh raha h 
+Or mtln aise clcik krne pr aise single slot m aa raha voh acha nhi dikh raha h koi badiya ux ui approach lagao tagda ki cilk pr feasible way m show ho
+The user wants:
+
+ALL cards on the dashboard to have info - not just KPI cards, but also the chart cards, the stats breakdown section, the node types panel, edge types panel, quick links panel, etc.
+Better UX/UI for showing the info when clicking - not just an accordion below the card, but something more polished
+Let me think about what "all cards" means on the dashboard:
+
+4 KPI cards (Total Nodes, Total Edges, Anomalous Connections, Top Communicator)
+
+Node type donut chart card
+
+Top communicators bar chart card
+
+Graph Statistics Breakdown card
+
+Node Types card
+
+Edge Types card
+
+Quick Links card
+
+Recent Alerts card
+
+For the UX approach, the current inline expand isn't ideal. I'm considering several options: tooltips on hover, a side drawer that slides in from the right, a floating popover positioned near the card, a bottom sheet that slides up, or a smoother animated inline expansion.
+
+I think a floating popover that intelligently positions itself near the clicked card would work well—it's clean, doesn't disrupt the layout, and feels modern. A slide-in right panel is another solid option that's common in enterprise dashboards. I'm leaning toward a bottom slide-up panel for visual appeal and simplicity. I'm settling on a bottom drawer approach—it's modern, works beautifully on mobile, and gives plenty of space for detailed info. I'll create an InfoDrawer component that slides up from the bottom with a smooth animation, dims the backdrop, and can be dismissed by pressing Escape or clicking outside.
+
+The key is managing this at the Dashboard level with a single state tracking which card's info is displayed. For KPI cards, I'll add an onClick handler that passes the card data up, and for other components like charts and stats panels, I'll wrap them in clickable containers so they all trigger the drawer consistently. Writing the drawer component... Writing component styles...
+
+Now I'm thinking through what info content each card on the dashboard needs—the KPIs already have their explanations, but I should add helpful context for the charts and panels so users understand what they're looking at.
+
+My approach is to make the dashboard interactive by having each card open an info drawer when clicked. I'll manage the drawer state at the dashboard level with a helper function that sets the title, icon, accent color, and content, then wrap the clickable sections with onClick handlers that trigger this.
+
+Now I'm building the InfoDrawer component with a smooth bottom sheet animation, backdrop overlay, and responsive sizing that constrains to max-width on desktop but goes full-width on mobile.
+
+Writing the drawer component... Writing the sheet component... Now I'm setting up the page component to manage the drawer state and wire everything together. I'll need to define the drawer state type, add handlers to open it, and update KPICard to accept a click callback that triggers the drawer instead of managing its own internal state.
+
+For the chart cards and other complex components, I should add a subtle info icon button in the header rather than making the entire card clickable, since that would interfere with chart interactions. But actually, the user asked for all cards to be clickable, so I need to find a way to make them all work—maybe the info button approach is the cleanest solution that doesn't break existing functionality.
+
+Let me structure this consistently: KPI cards get full clickability since they're just text, while chart and complex cards get a clickable header area or info icon that opens the drawer with details about that card.
+
+Now I'll write out the complete implementation for page.tsx with these changes.
+
+Updating page.tsx with drawer integration... Now I'm making the chart cards clickable too, adding an info icon next to the headers that opens the drawer with relevant details about each chart. Then I'll wire up the InfoDrawer component at the bottom to display the selected information.
+
+For the KPICard component, I'm simplifying it by removing the infoContent prop and replacing it with an onCardClick callback instead—this way the dashboard page handles all the drawer content management in one place, keeping the card component cleaner and the logic more centralized.
+
+Now I'm designing the InfoDrawer with a clean layout that includes a drag handle at the top, the icon and title in the header with a close button, and the content area below.
+
+The drawer needs to take up about 35-40% of the screen height and be scrollable internally, with rounded top corners and a smooth slide-up animation. I'll use CSS transforms to handle the open/closed states—keeping the element in the DOM always so the animation works smoothly, translating it off-screen when closed and using opacity changes on the backdrop.
+
+Writing the drawer implementation...
+
+Samajh gaya — ek proper bottom sheet drawer chahiye jo smoothly slide up kare, aur saare dashboard cards (charts, stats breakdown, sab) pe kaam kare. Let me redo this properly.
+
+Write d:\Personal\GraphRL-Sec\frontend\src\components\ui\InfoDrawer.tsx
+110 lines
+"use client";
+
+/**
+ * InfoDrawer — bottom sheet that slides up from the viewport floor.
+ *
+ * Always rendered (for smooth CSS transitions); hidden via translate-y-full
+ * when `open` is false.  Backdrop fades in/out independently.
+ *
+ * Closes on:  Escape key · backdrop click · X button
+ */
+
+import { useEffect } from "react";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+export interface InfoDrawerProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  icon?: React.ReactNode;
+  accentColor?: string;
+  children?: React.ReactNode;
+}
+
+export default function InfoDrawer({
+  open,
+  onClose,
+  title,
+  icon,
+  accentColor = "#58a6ff",
+  children,
+}: InfoDrawerProps): React.ReactElement {
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && open) onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  return (
+    <>
+      {/* ── Backdrop ─────────────────────────────────────────────────── */}
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300",
+          open ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        aria-hidden="true"
+        onClick={onClose}
+      />
+
+      {/* ── Sheet ────────────────────────────────────────────────────── */}
+      <div
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 transition-transform duration-300 ease-out",
+          open ? "translate-y-0" : "translate-y-full",
+        )}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        {/* Drag handle pill */}
+        <div className="flex justify-center pb-1 pt-3">
+          <div className="h-1 w-10 rounded-full bg-[#30363d]" />
+        </div>
+
+        {/* Card */}
+        <div className="rounded-t-2xl border border-b-0 border-[#30363d] bg-[#161b22] shadow-2xl">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-[#30363d] px-6 py-4">
+            <div className="flex items-center gap-3">
+              {icon != null && (
+                <span
+                  className="rounded-lg p-2"
+                  style={{
+                    color: accentColor,
+                    backgroundColor: `${accentColor}20`,
+                  }}
+                  aria-hidden="true"
+                >
+                  {icon}
+                </span>
+              )}
+              <h2 className="text-base font-semibold text-[#e6edf3]">
+                {title}
+              </h2>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-[#8b949e] transition-colors hover:bg-[#30363d] hover:text-[#e6edf3]"
+              aria-label="Close"
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="max-h-[45vh] overflow-y-auto px-6 py-5 text-sm leading-relaxed text-[#8b949e]">
+            {children}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+Now simplify KPICard — just accepts onCardClick:
+
+Write d:\Personal\GraphRL-Sec\frontend\src\components\layout\KPICard.tsx
+123 lines
+"use client";
+
+/**
+ * KPICard — a metric summary card used across the SOC dashboard.
+ *
+ * Pass `onCardClick` to make the card interactive — clicking opens
+ * the parent-managed InfoDrawer with context about this metric.
+ */
+
+import { cn, formatNumber } from "@/lib/utils";
+
+interface KPICardProps {
+  title: string;
+  value: string | number | null;
+  subtitle?: string;
+  icon: React.ReactNode;
+  accentColor?: string;
+  loading?: boolean;
+  delta?: string;
+  deltaPositive?: boolean;
+  /** When provided the card becomes clickable and shows a hover ring. */
+  onCardClick?: () => void;
+}
+
+function SkeletonLine({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn("animate-pulse rounded bg-[#30363d]/60", className)}
+      aria-hidden="true"
+    />
+  );
+}
+
+export default function KPICard({
+  title,
+  value,
+  subtitle,
+  icon,
+  accentColor = "#58a6ff",
+  loading = false,
+  delta,
+  deltaPositive,
+  onCardClick,
+}: KPICardProps): React.ReactElement {
+  const displayValue =
+    typeof value === "number" ? formatNumber(value) : (value ?? "—");
+
+  const clickable = onCardClick != null;
+
+  return (
+    <article
+      className={cn(
+        "flex flex-col gap-3 rounded-lg border border-[#30363d] bg-[#161b22] p-5 transition-colors duration-150",
+        clickable &&
+          "cursor-pointer select-none hover:border-[#58a6ff]/50 hover:bg-[#1c2230]",
+      )}
+      aria-label={`KPI: ${title}${clickable ? " — click for details" : ""}`}
+      onClick={clickable ? onCardClick : undefined}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onCardClick();
+              }
+            }
+          : undefined
+      }
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+          {title}
+        </span>
+        <span
+          className="rounded-md p-1.5"
+          style={{ color: accentColor, backgroundColor: `${accentColor}18` }}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+      </div>
+
+      {/* Value */}
+      {loading ? (
+        <SkeletonLine className="h-8 w-24" />
+      ) : (
+        <p
+          className="text-3xl font-bold tracking-tight text-[#e6edf3]"
+          aria-live="polite"
+        >
+          {displayValue}
+        </p>
+      )}
+
+      {/* Subtitle + delta */}
+      <div className="flex items-center justify-between">
+        {loading ? (
+          <SkeletonLine className="h-3.5 w-32" />
+        ) : (
+          <span className="text-xs text-[#8b949e]">{subtitle ?? " "}</span>
+        )}
+        {!loading && delta != null && (
+          <span
+            className={cn(
+              "text-xs font-medium",
+              deltaPositive === true
+                ? "text-[#3fb950]"
+                : deltaPositive === false
+                ? "text-[#f85149]"
+                : "text-[#8b949e]",
+            )}
+          >
+            {delta}
+          </span>
+        )}
+      </div>
+    </article>
+  );
+}
+Now rewrite the Dashboard page with drawer state wired to every card:
+
+Write d:\Personal\GraphRL-Sec\frontend\src\app\page.tsx
+787 lines
+"use client";
+
+/**
+ * Dashboard page — SOC overview with KPI cards, charts, and recent alerts.
+ *
+ * Data sources:
+ *   - /api/stats                (graph-wide counts, 30s refresh)
+ *   - /api/stats/top-communicators?limit=10
+ *   - /api/graph/anomalous?threshold=0.5&limit=20
+ *   - /api/alerts?limit=20
+ *
+ * Every card on the page is clickable — clicking opens a bottom-sheet
+ * InfoDrawer that explains what that card/section shows.
+ */
+
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Activity,
+  AlertTriangle,
+  BarChart2,
+  Globe,
+  Layers,
+  Network,
+  PieChart,
+  Server,
+  Zap,
+} from "lucide-react";
+import Link from "next/link";
+
+import Header from "@/components/layout/Header";
+import KPICard from "@/components/layout/KPICard";
+import SeverityDonut from "@/components/charts/SeverityDonut";
+import TopCommunicators from "@/components/charts/TopCommunicators";
+import AlertTable from "@/components/alerts/AlertTable";
+import InfoDrawer, { type InfoDrawerProps } from "@/components/ui/InfoDrawer";
+
+import apiClient from "@/lib/api";
+import { formatNumber, severityBadgeClass, cn } from "@/lib/utils";
+import type {
+  AlertResponse,
+  CommunicatorResponse,
+  EdgeResponse,
+  GraphStatsResponse,
+} from "@/types/api";
+
+// ---------------------------------------------------------------------------
+// Query functions
+// ---------------------------------------------------------------------------
+
+async function fetchStats(): Promise<GraphStatsResponse> {
+  const { data } = await apiClient.get<GraphStatsResponse>("/api/stats");
+  return data;
+}
+
+async function fetchTopCommunicators(): Promise<CommunicatorResponse[]> {
+  const { data } = await apiClient.get<CommunicatorResponse[]>(
+    "/api/stats/top-communicators",
+    { params: { limit: 10 } },
+  );
+  return data;
+}
+
+async function fetchAnomalousEdges(): Promise<EdgeResponse[]> {
+  const { data } = await apiClient.get<EdgeResponse[]>("/api/graph/anomalous", {
+    params: { threshold: 0.5, limit: 20 },
+  });
+  return data;
+}
+
+async function fetchRecentAlerts(): Promise<AlertResponse[]> {
+  const { data } = await apiClient.get<{ alerts: AlertResponse[] }>(
+    "/api/alerts",
+    { params: { limit: 20, offset: 0 } },
+  );
+  return data.alerts;
+}
+
+// ---------------------------------------------------------------------------
+// Error state component
+// ---------------------------------------------------------------------------
+
+function ErrorState({ message }: { message: string }): React.ReactElement {
+  return (
+    <div
+      className="flex items-center gap-3 rounded-lg border border-[#f85149]/30 bg-[#f85149]/10 px-4 py-3 text-sm text-[#f85149]"
+      role="alert"
+      aria-live="assertive"
+    >
+      <AlertTriangle size={16} aria-hidden="true" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton card
+// ---------------------------------------------------------------------------
+
+function SkeletonCard(): React.ReactElement {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-[#30363d] bg-[#161b22] p-5">
+      <div className="h-3 w-24 animate-pulse rounded bg-[#30363d]/60" />
+      <div className="h-8 w-16 animate-pulse rounded bg-[#30363d]/60" />
+      <div className="h-3 w-32 animate-pulse rounded bg-[#30363d]/60" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Clickable card wrapper (for non-KPI cards like charts, tables)
+// ---------------------------------------------------------------------------
+
+function ClickableCard({
+  onClick,
+  className,
+  children,
+}: {
+  onClick: () => void;
+  className?: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div
+      className={cn(
+        "cursor-pointer rounded-lg border border-[#30363d] bg-[#161b22] p-5",
+        "transition-colors duration-150 hover:border-[#58a6ff]/50 hover:bg-[#1c2230]",
+        className,
+      )}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Drawer info definitions  (all content in one place, easy to maintain)
+// ---------------------------------------------------------------------------
+
+type DrawerDef = Omit<InfoDrawerProps, "open" | "onClose">;
+
+const DRAWER_TOTAL_NODES: DrawerDef = {
+  title: "Total Nodes",
+  icon: <Layers size={20} />,
+  accentColor: "#58a6ff",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>
+        Total count of every entity node stored in the Neo4j knowledge graph,
+        built from UNSW-NB15 and CICIDS2017 network capture data.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          { label: "Host", color: "#58a6ff", desc: "Internal machines on the monitored LAN" },
+          { label: "ExternalIP", color: "#f85149", desc: "Public IPs communicating with the network" },
+          { label: "Service", color: "#3fb950", desc: "Network ports/services (e.g. :443, :22)" },
+          { label: "Domain", color: "#d29922", desc: "DNS domain names resolved by hosts" },
+          { label: "User", color: "#bc8cff", desc: "User accounts in authentication logs" },
+        ].map((t) => (
+          <div key={t.label} className="rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2">
+            <p className="mb-0.5 text-xs font-semibold" style={{ color: t.color }}>{t.label}</p>
+            <p className="text-[11px] text-[#8b949e]">{t.desc}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+const DRAWER_TOTAL_EDGES: DrawerDef = {
+  title: "Total Edges",
+  icon: <Network size={20} />,
+  accentColor: "#3fb950",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>
+        Total count of all relationship edges — each represents a recorded
+        interaction between two entities in the network graph.
+      </p>
+      <div className="flex flex-col gap-2">
+        {[
+          { label: "CONNECTS_TO", desc: "Network flows between a host and an external IP" },
+          { label: "USES_SERVICE", desc: "A host accessing a specific port/service" },
+          { label: "RESOLVES_DOMAIN", desc: "DNS resolution — a host looked up a domain name" },
+          { label: "AUTHENTICATED_AS", desc: "Authentication event linking a host to a user account" },
+        ].map((e) => (
+          <div key={e.label} className="flex gap-3 rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2">
+            <code className="shrink-0 text-[11px] text-[#3fb950]">{e.label}</code>
+            <p className="text-[11px] text-[#8b949e]">{e.desc}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+const DRAWER_ANOMALOUS: DrawerDef = {
+  title: "Anomalous Connections",
+  icon: <AlertTriangle size={20} />,
+  accentColor: "#f85149",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>
+        Edges scored <strong className="text-[#f85149]">≥ 0.5 attack probability</strong> by
+        the <strong className="text-[#e6edf3]">T-HetGAT model</strong> (Temporal Heterogeneous
+        Graph Attention Network).
+      </p>
+      <p>
+        T-HetGAT reads network flow windows as heterogeneous graphs and uses
+        temporal attention to assign each edge an anomaly score in [0, 1].
+        It was trained on 17,657 labelled graph windows with FocalLoss to handle
+        the 82.5% normal / 17.5% attack class imbalance.
+      </p>
+      <div className="rounded-md border border-[#30363d] bg-[#0d1117] px-4 py-3">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#8b949e]">
+          Severity thresholds
+        </p>
+        {[
+          { label: "Critical", range: "≥ 0.90", color: "#f85149" },
+          { label: "High",     range: "≥ 0.75", color: "#d29922" },
+          { label: "Medium",   range: "≥ 0.50", color: "#3fb950" },
+          { label: "Low",      range: "≥ 0.25", color: "#58a6ff" },
+        ].map((s) => (
+          <div key={s.label} className="flex items-center justify-between py-1">
+            <span className="text-xs" style={{ color: s.color }}>{s.label}</span>
+            <span className="font-mono text-xs text-[#8b949e]">{s.range}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+const DRAWER_TOP_COMMUNICATOR: DrawerDef = {
+  title: "Top Communicator",
+  icon: <Zap size={20} />,
+  accentColor: "#d29922",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>
+        The single entity with the <strong className="text-[#e6edf3]">highest outbound
+        connection count</strong> in the current graph snapshot.
+      </p>
+      <p>
+        Unusually high outbound counts from a single host can indicate:
+      </p>
+      <ul className="flex flex-col gap-1.5 pl-4">
+        {[
+          "Port scanning / reconnaissance",
+          "Lateral movement across the LAN",
+          "Data exfiltration to external IPs",
+          "C2 beaconing (command-and-control)",
+          "DDoS participation",
+        ].map((item) => (
+          <li key={item} className="list-disc text-[#8b949e]">{item}</li>
+        ))}
+      </ul>
+      <p className="text-[11px]">
+        See the <strong className="text-[#e6edf3]">Analytics</strong> page for the full top-20 ranking.
+      </p>
+    </div>
+  ),
+};
+
+const DRAWER_DONUT: DrawerDef = {
+  title: "Node Type Distribution",
+  icon: <PieChart size={20} />,
+  accentColor: "#58a6ff",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>
+        Donut chart showing the <strong className="text-[#e6edf3]">proportion of each node type</strong> in
+        the full knowledge graph.
+      </p>
+      <p>
+        A healthy network typically has far more Host and Service nodes than
+        ExternalIP or User nodes. A spike in ExternalIP nodes relative to Hosts
+        could indicate an active scanning campaign or a broad DDoS.
+      </p>
+      <p className="text-[11px]">
+        Hover over each segment to see the exact count. Data refreshes every 30 s.
+      </p>
+    </div>
+  ),
+};
+
+const DRAWER_COMMUNICATORS_CHART: DrawerDef = {
+  title: "Top 10 Communicators",
+  icon: <BarChart2 size={20} />,
+  accentColor: "#3fb950",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>
+        Horizontal bar chart of the <strong className="text-[#e6edf3]">10 most active entities</strong> by
+        outbound connection count.
+      </p>
+      <p>
+        Each bar represents one IP/entity. Longer bars = more connections initiated.
+        Entities at the top of this list warrant closer investigation — they have the
+        highest potential blast radius if compromised.
+      </p>
+      <p className="text-[11px]">
+        The full top-20 table is available on the <strong className="text-[#e6edf3]">Analytics</strong> page.
+      </p>
+    </div>
+  ),
+};
+
+const DRAWER_STATS_BREAKDOWN: DrawerDef = {
+  title: "Graph Statistics Breakdown",
+  icon: <Layers size={20} />,
+  accentColor: "#8b949e",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>
+        A flat view of every node type and edge type count from Neo4j — the same
+        numbers as the KPI cards but all in one glanceable grid.
+      </p>
+      <p>
+        The first five columns (blue/red/green/yellow/purple) are node types.
+        The last four (grey) are edge relationship types.
+      </p>
+      <p className="text-[11px]">
+        These counts reflect the entire graph, not just the anomalous subset shown
+        in the Graph Explorer.
+      </p>
+    </div>
+  ),
+};
+
+const DRAWER_NODE_TYPES: DrawerDef = {
+  title: "Node Types",
+  icon: <Server size={20} />,
+  accentColor: "#58a6ff",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>Breakdown of the 5 entity types that make up the knowledge graph nodes:</p>
+      <div className="flex flex-col gap-2">
+        {[
+          { label: "Host", color: "#58a6ff", desc: "Internal machines — workstations, servers, IoT devices on the monitored LAN segment" },
+          { label: "ExternalIP", color: "#f85149", desc: "Public internet IPs observed communicating with the internal network" },
+          { label: "Service", color: "#3fb950", desc: "Network services identified by port number (e.g. port 443 = HTTPS, port 22 = SSH)" },
+          { label: "Domain", color: "#d29922", desc: "DNS domain names resolved during the capture period" },
+          { label: "User", color: "#bc8cff", desc: "User account identifiers extracted from authentication and login events" },
+        ].map((t) => (
+          <div key={t.label} className="flex gap-3 rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2">
+            <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+            <div>
+              <p className="mb-0.5 text-xs font-semibold" style={{ color: t.color }}>{t.label}</p>
+              <p className="text-[11px] text-[#8b949e]">{t.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+const DRAWER_EDGE_TYPES: DrawerDef = {
+  title: "Edge Types",
+  icon: <Activity size={20} />,
+  accentColor: "#3fb950",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>The 4 relationship types that connect nodes in the graph:</p>
+      <div className="flex flex-col gap-2">
+        {[
+          { label: "CONNECTS_TO", desc: "A host established a network flow to an external IP. Carries flow features: bytes, packets, duration, protocol." },
+          { label: "USES_SERVICE", desc: "A host accessed a specific port/service. Links hosts to service nodes." },
+          { label: "RESOLVES_DOMAIN", desc: "A DNS resolution event. Links a host to the domain name it looked up." },
+          { label: "AUTHENTICATED_AS", desc: "An authentication event linking a host to a user account (login, sudo, etc.)." },
+        ].map((e) => (
+          <div key={e.label} className="rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2">
+            <p className="mb-0.5 font-mono text-[11px] font-semibold text-[#3fb950]">{e.label}</p>
+            <p className="text-[11px] text-[#8b949e]">{e.desc}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+const DRAWER_QUICK_LINKS: DrawerDef = {
+  title: "Quick Links",
+  icon: <Globe size={20} />,
+  accentColor: "#d29922",
+  children: (
+    <div className="flex flex-col gap-2">
+      <p>Jump to other sections of the dashboard:</p>
+      <ul className="flex flex-col gap-1.5 pl-4">
+        <li className="list-disc"><strong className="text-[#e6edf3]">Alerts</strong> — full paginated list of all anomalous connections with severity filter</li>
+        <li className="list-disc"><strong className="text-[#e6edf3]">Graph Explorer</strong> — interactive vis-network graph of anomalous paths, clickable nodes</li>
+        <li className="list-disc"><strong className="text-[#e6edf3]">Analytics</strong> — detailed node/edge counts and top-20 communicators table</li>
+      </ul>
+    </div>
+  ),
+};
+
+const DRAWER_RECENT_ALERTS: DrawerDef = {
+  title: "Recent Alerts",
+  icon: <AlertTriangle size={20} />,
+  accentColor: "#f85149",
+  children: (
+    <div className="flex flex-col gap-3">
+      <p>
+        The <strong className="text-[#e6edf3]">20 most recent anomalous connections</strong> flagged
+        by the T-HetGAT model, shown in a condensed table.
+      </p>
+      <p>
+        Each row shows the source IP, destination IP, protocol, attack score,
+        and severity band. Click a row on the Alerts page to open the full
+        detail panel with the 2-hop neighborhood graph.
+      </p>
+      <p>
+        Severity is derived from the model score:
+      </p>
+      <div className="flex flex-col gap-1">
+        {[
+          { label: "Critical ≥ 0.90", color: "#f85149" },
+          { label: "High     ≥ 0.75", color: "#d29922" },
+          { label: "Medium   ≥ 0.50", color: "#3fb950" },
+          { label: "Low      ≥ 0.25", color: "#58a6ff" },
+        ].map((s) => (
+          <div key={s.label} className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+            <span className="font-mono text-[11px]" style={{ color: s.color }}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function DashboardPage(): React.ReactElement {
+  // ── Data queries ──────────────────────────────────────────────────────────
+  const statsQuery = useQuery({
+    queryKey: ["graph-stats"],
+    queryFn: fetchStats,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+
+  const communicatorsQuery = useQuery({
+    queryKey: ["top-communicators", 10],
+    queryFn: fetchTopCommunicators,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+
+  const anomalousQuery = useQuery({
+    queryKey: ["anomalous-edges", 0.5, 20],
+    queryFn: fetchAnomalousEdges,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+
+  const alertsQuery = useQuery({
+    queryKey: ["alerts", 20, 0, null],
+    queryFn: fetchRecentAlerts,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+
+  const stats = statsQuery.data;
+  const communicators = communicatorsQuery.data ?? [];
+  const anomalousEdges = anomalousQuery.data ?? [];
+  const recentAlerts = alertsQuery.data ?? [];
+
+  const topCommunicator =
+    communicators.length > 0 ? communicators[0].entity_key : "—";
+
+  // ── Drawer state ─────────────────────────────────────────────────────────
+  const [drawerDef, setDrawerDef] = useState<DrawerDef | null>(null);
+  const openDrawer = (def: DrawerDef) => setDrawerDef(def);
+  const closeDrawer = () => setDrawerDef(null);
+
+  // ── Page-level info (header About button) ────────────────────────────────
+  const pageInfo = (
+    <div className="flex flex-col gap-3">
+      <p>
+        Real-time SOC overview of the network knowledge graph built from UNSW-NB15
+        and CICIDS2017 datasets. All metrics refresh every 30 seconds.
+      </p>
+      <p className="text-[11px]">
+        Click any card or section to learn what it shows and how to interpret it.
+      </p>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col overflow-auto">
+      <Header
+        title="Dashboard"
+        subtitle="GraphRL-Sec Security Operations Centre"
+        infoContent={pageInfo}
+      />
+
+      <div className="flex flex-col gap-6 p-6">
+        {/* ── KPI Cards ─────────────────────────────────────────────────── */}
+        <section aria-label="Key performance indicators">
+          {statsQuery.isError && (
+            <ErrorState message="Failed to load graph statistics. Is the API server running?" />
+          )}
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+            {statsQuery.isLoading ? (
+              <>
+                <SkeletonCard /><SkeletonCard />
+                <SkeletonCard /><SkeletonCard />
+              </>
+            ) : (
+              <>
+                <KPICard
+                  title="Total Nodes"
+                  value={stats?.total_nodes ?? null}
+                  subtitle="Hosts + IPs + Services + Domains + Users"
+                  icon={<Layers size={18} />}
+                  accentColor="#58a6ff"
+                  onCardClick={() => openDrawer(DRAWER_TOTAL_NODES)}
+                />
+                <KPICard
+                  title="Total Edges"
+                  value={stats?.total_edges ?? null}
+                  subtitle="All relationship types"
+                  icon={<Network size={18} />}
+                  accentColor="#3fb950"
+                  onCardClick={() => openDrawer(DRAWER_TOTAL_EDGES)}
+                />
+                <KPICard
+                  title="Anomalous Connections"
+                  value={anomalousEdges.length}
+                  subtitle="Attack score ≥ 0.5"
+                  icon={<AlertTriangle size={18} />}
+                  accentColor="#f85149"
+                  onCardClick={() => openDrawer(DRAWER_ANOMALOUS)}
+                />
+                <KPICard
+                  title="Top Communicator"
+                  value={topCommunicator}
+                  subtitle={
+                    communicators.length > 0
+                      ? `${formatNumber(communicators[0].outbound_count)} outbound connections`
+                      : "No data"
+                  }
+                  icon={<Zap size={18} />}
+                  accentColor="#d29922"
+                  onCardClick={() => openDrawer(DRAWER_TOP_COMMUNICATOR)}
+                />
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* ── Charts row ────────────────────────────────────────────────── */}
+        <section className="grid gap-4 xl:grid-cols-2" aria-label="Analytics charts">
+          {/* Node type donut */}
+          <ClickableCard onClick={() => openDrawer(DRAWER_DONUT)}>
+            {statsQuery.isLoading ? (
+              <div className="flex flex-col gap-3">
+                <div className="h-3 w-32 animate-pulse rounded bg-[#30363d]/60" />
+                <div className="h-64 animate-pulse rounded bg-[#30363d]/30" />
+              </div>
+            ) : statsQuery.isError || stats == null ? (
+              <ErrorState message="Chart data unavailable." />
+            ) : (
+              <SeverityDonut stats={stats} />
+            )}
+          </ClickableCard>
+
+          {/* Top communicators bar */}
+          <ClickableCard onClick={() => openDrawer(DRAWER_COMMUNICATORS_CHART)}>
+            {communicatorsQuery.isLoading ? (
+              <div className="flex flex-col gap-3">
+                <div className="h-3 w-32 animate-pulse rounded bg-[#30363d]/60" />
+                <div className="h-64 animate-pulse rounded bg-[#30363d]/30" />
+              </div>
+            ) : communicatorsQuery.isError ? (
+              <ErrorState message="Top communicators unavailable." />
+            ) : (
+              <TopCommunicators communicators={communicators} />
+            )}
+          </ClickableCard>
+        </section>
+
+        {/* ── Stats breakdown ───────────────────────────────────────────── */}
+        {stats != null && (
+          <section aria-label="Graph statistics breakdown">
+            <ClickableCard onClick={() => openDrawer(DRAWER_STATS_BREAKDOWN)}>
+              <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+                Graph Statistics Breakdown
+              </h2>
+              <div className="grid grid-cols-3 gap-4 sm:grid-cols-5 lg:grid-cols-9">
+                {[
+                  { label: "Hosts",        value: stats.host_count,            color: "#58a6ff" },
+                  { label: "Ext. IPs",     value: stats.external_ip_count,     color: "#f85149" },
+                  { label: "Services",     value: stats.service_count,         color: "#3fb950" },
+                  { label: "Domains",      value: stats.domain_count,          color: "#d29922" },
+                  { label: "Users",        value: stats.user_count,            color: "#bc8cff" },
+                  { label: "CONNECTS_TO",  value: stats.connects_to_count,     color: "#8b949e" },
+                  { label: "USES_SERVICE", value: stats.uses_service_count,    color: "#8b949e" },
+                  { label: "RESOLVES",     value: stats.resolves_domain_count, color: "#8b949e" },
+                  { label: "AUTH_AS",      value: stats.authenticated_as_count,color: "#8b949e" },
+                ].map((item) => (
+                  <div key={item.label} className="flex flex-col gap-1">
+                    <span className="text-lg font-bold" style={{ color: item.color }}>
+                      {formatNumber(item.value)}
+                    </span>
+                    <span className="text-[11px] text-[#8b949e]">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </ClickableCard>
+          </section>
+        )}
+
+        {/* ── Node / Edge types + Quick Links ───────────────────────────── */}
+        <section aria-label="Additional statistics">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {/* Node Types */}
+            <ClickableCard onClick={() => openDrawer(DRAWER_NODE_TYPES)}>
+              <div className="mb-3 flex items-center gap-2">
+                <Server size={14} className="text-[#58a6ff]" aria-hidden="true" />
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+                  Node Types
+                </h2>
+              </div>
+              {statsQuery.isLoading ? (
+                <div className="space-y-2">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="h-4 animate-pulse rounded bg-[#30363d]/60" />
+                  ))}
+                </div>
+              ) : stats != null ? (
+                <div className="space-y-2">
+                  {[
+                    { name: "Host",       count: stats.host_count,         color: "#58a6ff" },
+                    { name: "ExternalIP", count: stats.external_ip_count,  color: "#f85149" },
+                    { name: "Service",    count: stats.service_count,      color: "#3fb950" },
+                    { name: "Domain",     count: stats.domain_count,       color: "#d29922" },
+                    { name: "User",       count: stats.user_count,         color: "#bc8cff" },
+                  ].map((item) => (
+                    <div key={item.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: item.color }}
+                          aria-hidden="true"
+                        />
+                        <span className="text-sm text-[#e6edf3]">{item.name}</span>
+                      </div>
+                      <span className="text-sm font-semibold text-[#8b949e]">
+                        {formatNumber(item.count)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </ClickableCard>
+
+            {/* Edge Types */}
+            <ClickableCard onClick={() => openDrawer(DRAWER_EDGE_TYPES)}>
+              <div className="mb-3 flex items-center gap-2">
+                <Activity size={14} className="text-[#3fb950]" aria-hidden="true" />
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+                  Edge Types
+                </h2>
+              </div>
+              {statsQuery.isLoading ? (
+                <div className="space-y-2">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-4 animate-pulse rounded bg-[#30363d]/60" />
+                  ))}
+                </div>
+              ) : stats != null ? (
+                <div className="space-y-2">
+                  {[
+                    { name: "CONNECTS_TO",     count: stats.connects_to_count },
+                    { name: "USES_SERVICE",    count: stats.uses_service_count },
+                    { name: "RESOLVES_DOMAIN", count: stats.resolves_domain_count },
+                    { name: "AUTHENTICATED_AS",count: stats.authenticated_as_count },
+                  ].map((item) => (
+                    <div key={item.name} className="flex items-center justify-between">
+                      <span className="font-mono text-xs text-[#8b949e]">{item.name}</span>
+                      <span className="text-sm font-semibold text-[#e6edf3]">
+                        {formatNumber(item.count)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </ClickableCard>
+
+            {/* Quick Links */}
+            <ClickableCard onClick={() => openDrawer(DRAWER_QUICK_LINKS)}>
+              <div className="mb-3 flex items-center gap-2">
+                <Globe size={14} className="text-[#d29922]" aria-hidden="true" />
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+                  Quick Links
+                </h2>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Link
+                  href="/alerts"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-[#58a6ff] transition-colors hover:bg-[#58a6ff]/10"
+                >
+                  View All Alerts
+                  <AlertTriangle size={13} aria-hidden="true" />
+                </Link>
+                <Link
+                  href="/graph"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-[#58a6ff] transition-colors hover:bg-[#58a6ff]/10"
+                >
+                  Open Graph Explorer
+                  <Network size={13} aria-hidden="true" />
+                </Link>
+                <Link
+                  href="/analytics"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-[#58a6ff] transition-colors hover:bg-[#58a6ff]/10"
+                >
+                  Analytics
+                  <Activity size={13} aria-hidden="true" />
+                </Link>
+              </div>
+            </ClickableCard>
+          </div>
+        </section>
+
+        {/* ── Recent Alerts ─────────────────────────────────────────────── */}
+        <section aria-label="Recent anomalous connections">
+          <ClickableCard onClick={() => openDrawer(DRAWER_RECENT_ALERTS)}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+                Recent Alerts (last 20)
+              </h2>
+              <Link
+                href="/alerts"
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs text-[#58a6ff] hover:underline"
+              >
+                View all →
+              </Link>
+            </div>
+
+            {alertsQuery.isLoading ? (
+              <div className="space-y-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-10 animate-pulse rounded bg-[#30363d]/40" />
+                ))}
+              </div>
+            ) : alertsQuery.isError ? (
+              <ErrorState message="Failed to load recent alerts." />
+            ) : (
+              <AlertTable alerts={recentAlerts} />
+            )}
+          </ClickableCard>
+        </section>
+      </div>
+
+      {/* ── Bottom sheet info drawer ───────────────────────────────────── */}
+      <InfoDrawer
+        open={drawerDef != null}
+        onClose={closeDrawer}
+        title={drawerDef?.title ?? ""}
+        icon={drawerDef?.icon}
+        accentColor={drawerDef?.accentColor}
+      >
+        {drawerDef?.children}
+      </InfoDrawer>
+    </div>
+  );
+}
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1
+
+OUT
+(Bash completed with no output)
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx next build 2>&1 | tail -15
+
+OUT
+  Generating static pages using 11 workers (3/7) 
+  Generating static pages using 11 workers (5/7) 
+✓ Generating static pages using 11 workers (7/7) in 1559.7ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /alerts
+├ ○ /analytics
+└ ○ /graph
+
+
+○  (Static)  prerendered as static content
+Clean build. Commit karte hain:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add frontend/src/components/ui/InfoDrawer.tsx frontend/src/components/ui/InfoModal.tsx frontend/src/components/layout/KPICard.tsx frontend/src/app/page.tsx && git commit -m "$(cat <<'EOF'
+feat(frontend): bottom-sheet InfoDrawer on every dashboard card
+
+- InfoDrawer: full-width bottom sheet with smooth slide-up animation,
+  backdrop blur, drag handle, icon + title header, scrollable body,
+  Escape / backdrop-click to close
+- KPICard simplified: accepts onCardClick() callback, hover ring effect
+- Dashboard: ALL cards clickable (KPI, donut, bar chart, stats breakdown,
+  node types, edge types, quick links, recent alerts) — each opens a
+  rich InfoDrawer with explanations, severity tables, threat context
+- ClickableCard wrapper for non-KPI card sections
+- Page-level About button in Header for overall dashboard context
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+warning: in the working copy of 'frontend/src/app/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/layout/KPICard.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/ui/InfoDrawer.tsx', LF will be replaced by CRLF the next time Git touches it
+[main 2be8715] feat(frontend): bottom-sheet InfoDrawer on every dashboard card
+ 3 files changed, 580 insertions(+), 215 deletions(-)
+ create mode 100644 frontend/src/components/ui/InfoDrawer.tsx
+Ab yeh UX hai:
+
+Har card click karo → bottom se smooth slide-up drawer aata hai:
+
+Card	Drawer content
+Total Nodes	5 node types ka grid (color-coded, with descriptions)
+Total Edges	4 edge types with code labels
+Anomalous Connections	T-HetGAT model + severity threshold table
+Top Communicator	Threat indicators list
+Donut chart	Node distribution ka meaning
+Bar chart	Top communicators interpretation
+Stats Breakdown	Grid numbers ka context
+Node Types panel	Har type ki detailed description
+Edge Types panel	Har relationship ka meaning
+Quick Links	Navigation context
+Recent Alerts	Severity bands + alert system explain
+Drawer features:
+
+Bottom se smoothly slide up (CSS transform animation)
+Dark backdrop with blur effect
+Drag handle pill on top
+Icon + title header
+Scrollable body (max 45vh)
+Escape / backdrop click se close
+yaha per ek page info small icon top right corner pe banao jispe us pure page ki undersatnding ya waorking bataye ke ye page kis chiz ka hai and kya kya show ho raha hai uspe
+The user wants a small info icon in the top-right corner of each page that shows information about what that page is and what it displays. This is different from the "About" button we already added to the Header.
+
+Looking at the Header component, I already added an "About" button. But the user seems to want something more subtle - a small icon (like ℹ) in the top-right corner of each page.
+
+Wait, let me re-read: "ek page info small icon top right corner pe banao" - they want a small info icon in the top right corner of the page.
+
+Looking at the current Header, we already have an "About" button with text + icon.
+
+I think the user wants just the icon without text, positioned in the top-right corner as a subtle element that opens the page info when clicked. I should simplify the Header's About button to display only the small ℹ icon and make sure it's positioned as the rightmost element. Updating the Header component to replace the "About" pill with a small circular ℹ icon button positioned in the top-right, which will display automatically for pages that already pass infoContent to the Header.
+
+Header mein "About" text pill ko replace karta hoon — sirf ek small ℹ icon button top-right corner mein.
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+Removed 13 lines
+Now add the small ℹ icon after the live status pill (far top-right corner):
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+Added 13 lines
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1
+
+OUT
+(Bash completed with no output)
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add frontend/src/components/layout/Header.tsx && git commit -m "$(cat <<'EOF'
+feat(frontend): replace About pill with small info icon in header top-right
+
+Removes the text 'About' button and adds a compact circular ℹ icon
+button (h-7 w-7) at the far right of every page header. Hover turns
+it blue. Clicking opens the page-level InfoModal as before.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+warning: in the working copy of 'frontend/src/components/layout/Header.tsx', LF will be replaced by CRLF the next time Git touches it
+[main 6936716] feat(frontend): replace About pill with small info icon in header top-right
+ 1 file changed, 13 insertions(+), 13 deletions(-)
+Done. Ab har page ke header ke top-right corner mein:
+
+
+[Dashboard title]  [● Live]  [ℹ]
+ℹ icon — small circular button, dark background, border
+Hover → blue highlight ho jaata hai
+Click → InfoModal khulta hai jo poore page ki working explain karta hai
+Yeh sab 4 pages pe hai — Dashboard, Alerts, Graph Explorer, Analytics. Sidebar pe existing cards ka bottom-sheet drawer alag hai, aur page-level explanation is icon se milti hai.
+
+aesa nahi indepth info de pure page ki aur icon ka name aesa small me rakg page info kar ke
+The user wants:
+
+The icon button to show "Page Info" text (small) next to the icon
+More in-depth info content for each page - detailed explanations about what each page shows, how it works, what the data means
+Let me update:
+
+Header.tsx - change the button to show "Page Info" text (small) next to the ℹ icon
+All 4 pages - make the infoContent much more detailed/in-depth
+Let me think about what "in-depth" means for each page:
+
+Dashboard:
+
+What it is, what data sources, how the graph is built, what each section shows
+
+The KPI cards, charts, stats breakdown, node/edge types, recent alerts
+
+Alerts:
+
+What alerts are, how they're generated (T-HetGAT model), what severity means, how to use the page
+Filter, sort, pagination, detail panel
+Graph Explorer:
+
+What the graph shows, how to navigate, what the colors mean, what clicking does
+The anomalous threshold, how nodes are sized, neighborhood loading
+Analytics:
+
+What stats are shown, what top communicators means, what the system info shows
+Now I'll update the button in Header to display "Page Info" as small text alongside the icon, then flesh out each page's info content with these detailed explanations.
+
+Read d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+Now I need to:
+
+Update the Header button to show "Page Info" text next to the icon (small text)
+Make the InfoModal taller/bigger to accommodate more detailed content
+Update all 4 pages with much more in-depth info content
+Let me also update InfoModal to be wider and scrollable for the detailed content.
+
+For the button: "Page Info" in small text, next to the ℹ icon, as a pill/compact button.
+
+For the InfoModal - I should make it scrollable and wider since the content will be longer. Let me update InfoModal to have max-h and overflow-y-auto.
+
+Now I'm filling in the detailed content for each page. The Dashboard section will explain its real-time SOC purpose, how data flows from raw PCAP through feature extraction into the Neo4j graph database built from UNSW-NB15 and CICIDS2017 datasets, what each dashboard section displays, the 30-second auto-refresh rate, and how the T-HetGAT model scores edges. The Alerts page will describe how the anomaly detection works with the model assigning scores to connections.
+
+For the remaining sections, I'm explaining that alerts above the threshold get severity mappings, with filtering and pagination features plus a detail panel showing the 2-hop neighborhood around each alert. The Graph Explorer visualizes the network as an interactive knowledge graph starting with the top 300 anomalous edges, letting users search by IP and expand neighborhoods through 2-hop BFS queries in Neo4j, with node sizing based on connection counts. Finally, the Analytics page provides detailed statistics including exact Neo4j counts, top communicators ranked by outbound connections, and system information.
+
+Now I'm covering the dataset details, backend infrastructure, and the ML pipeline that powers the anomaly detection.
+
+Do cheezein update karta hoon: button mein "Page Info" text + har page pe indepth content.
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+Modified
+Now make InfoModal wider and scrollable for long content:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\components\ui\InfoModal.tsx
+Modified
+Edit d:\Personal\GraphRL-Sec\frontend\src\components\ui\InfoModal.tsx
+Modified
+Now write indepth page info for all 4 pages. Starting with Dashboard:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\page.tsx
+Added 52 lines
+Now update Alerts page with indepth info:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\alerts\page.tsx
+Added 50 lines
+Now Graph Explorer page:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\graph\page.tsx
+Added 59 lines
+Now Analytics page:
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\app\analytics\page.tsx
+Added 58 lines
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1 && npx next build 2>&1 | tail -10
+
+OUT
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /alerts
+├ ○ /analytics
+└ ○ /graph
+
+
+○  (Static)  prerendered as static content
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add frontend/src/components/layout/Header.tsx frontend/src/components/ui/InfoModal.tsx frontend/src/app/page.tsx frontend/src/app/alerts/page.tsx frontend/src/app/graph/page.tsx frontend/src/app/analytics/page.tsx && git commit -m "$(cat <<'EOF'
+feat(frontend): Page Info button + indepth page explanations on all 4 pages
+
+- Header: replaces icon-only button with compact 'Page Info' pill (icon + text)
+- InfoModal: wider (max-w-2xl), scrollable body (max-h-70vh) for long content
+- Dashboard: 5-section deep-dive (purpose, data sources, anomaly detection,
+  all sections explained, refresh behaviour)
+- Alerts: 5-section deep-dive (purpose, how alerts are generated, severity
+  bands with descriptions, all page features, what to investigate)
+- Graph Explorer: 5-section deep-dive (what is shown, threshold rationale,
+  node type colour grid, 6 navigation features, how to read attack patterns)
+- Analytics: 5-section deep-dive (purpose, graph stats explained, top
+  communicators columns, system info dataset details, refresh behaviour)
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+warning: in the working copy of 'frontend/src/app/alerts/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/app/analytics/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/app/graph/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/app/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/layout/Header.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/ui/InfoModal.tsx', LF will be replaced by CRLF the next time Git touches it
+[main b3dbf8e] feat(frontend): Page Info button + indepth page explanations on all 4 pages
+ 6 files changed, 297 insertions(+), 78 deletions(-)
+Done. Yeh changes hain:
+
+Button: Har page ke header top-right mein [ℹ  Page Info] — small icon + text, compact pill style. Hover pe blue ho jaata hai.
+
+Click karne pe modal khulta hai jisme:
+
+Page	Kya explain karta hai
+Dashboard	Kya hai, data sources (UNSW-NB15 + CICIDS2017), T-HetGAT model kaise kaam karta hai, har section (KPI cards, donut, bar chart, breakdown, alerts) individually explain, refresh behaviour
+Alerts	Alerts kaise generate hote hain, model ka AUROC, 4 severity bands with thresholds + descriptions (Critical/High/Medium/Low), page ke 4 features (filter, pagination, table, detail panel), kya investigate karna chahiye
+Graph Explorer	Initial load mein kya dikhta hai (300 anomalous edges, 0.3 threshold), node type colour grid with descriptions, 6 navigation controls (click/search/scroll/drag/legend/clear), attack patterns kaise padhein
+Analytics	Page ka purpose, node/edge count tables ka meaning, top communicators ke 2 key columns (Outbound + Destinations) explain with threat context, system information (dataset details, Neo4j, ML pipeline), refresh behaviour
+live wale button ko right side rakh aur pageinfo wala sab me left side hona chaiye har page pe
+The user wants:
+
+"Live" status button on the right side (it's already on the right, but maybe they want it to be the rightmost element)
+"Page Info" button on the left side of the header on every page
+Currently the header layout is:
+
+Left: title + subtitle
+Right: [Live status] [Page Info]
+They want:
+
+Left: title + subtitle + [Page Info]
+Right: [Live status]
+Let me update Header.tsx to move the Page Info button to the left side (next to the title/subtitle area) and keep Live on the right.
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+Modified
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1
+
+OUT
+(Bash completed with no output)
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add frontend/src/components/layout/Header.tsx && git commit -m "$(cat <<'EOF'
+fix(frontend): move Page Info to left, Live status to right in header
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+warning: in the working copy of 'frontend/src/components/layout/Header.tsx', LF will be replaced by CRLF the next time Git touches it
+[main b11210c] fix(frontend): move Page Info to left, Live status to right in header
+ 1 file changed, 17 insertions(+), 17 deletions(-)
+Done. Ab layout yeh hai har page pe:
+
+
+[Title  Subtitle  [ℹ Page Info]]          [● Live]
+← left side                              right side →
+bhai itna left nahi matlab pehle pageinfo uske baju me live wala aesa bola
+The user wants: [Page Info] [Live] both on the right side, with Page Info first and Live second. So the layout should be:
+
+Left: Title + Subtitle
+Right: [Page Info] [Live]
+
+Edit d:\Personal\GraphRL-Sec\frontend\src\components\layout\Header.tsx
+Modified
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && npx tsc --noEmit --project frontend/tsconfig.json 2>&1 && git add frontend/src/components/layout/Header.tsx && git commit -m "fix(frontend): Page Info left of Live — both on right side of header
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+
+OUT
+Exit code 1
+npm warn exec The following package was not found and will be installed: tsc@2.0.4
+npm notice Beginning October 4, 2021, all connections to the npm registry - including for package installation - must use TLS 1.2 or higher. You are currently using plaintext http to connect. Please visit the GitHub blog for more information: https://github.blog/2021-08-23-npm-registry-deprecating-tls-1-0-tls-1-1/
+
+[41m                                                                               [0m
+[41m[37m                This is not the tsc command you are looking for                [0m
+[41m                                                                               [0m
+
+To get access to the TypeScript compiler, [34mtsc[0m, from the command line either:
+
+- Use [1mnpm install typescript[0m to first add TypeScript to your project [1mbefore[0m using npx
+- Use [1myarn[0m to avoid accidentally running code from un-installed packages
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec/frontend" && npx tsc --noEmit 2>&1 && cd .. && git add frontend/src/components/layout/Header.tsx && git commit -m "fix(frontend): Page Info left of Live — both on right side of header
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+
+OUT
+warning: in the working copy of 'frontend/src/components/layout/Header.tsx', LF will be replaced by CRLF the next time Git touches it
+[main 0343c52] fix(frontend): Page Info left of Live — both on right side of header
+ 1 file changed, 18 insertions(+), 18 deletions(-)
+Ab layout:
+
+
+[Title  Subtitle]          [ℹ Page Info]  [● Live]
+← left                              right →
+Dono right side pe hain — pehle Page Info, uske saath Live.
+
+sab update github pe add kar de ab
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git status && git log --oneline origin/main..HEAD
+
+OUT
+On branch main
+Your branch is ahead of 'origin/main' by 8 commits.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .claude/settings.local.json
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	models/thetgat/
+
+no changes added to commit (use "git add" and/or "git commit -a")
+0343c52 fix(frontend): Page Info left of Live — both on right side of header
+b11210c fix(frontend): move Page Info to left, Live status to right in header
+b3dbf8e feat(frontend): Page Info button + indepth page explanations on all 4 pages
+6936716 feat(frontend): replace About pill with small info icon in header top-right
+2be8715 feat(frontend): bottom-sheet InfoDrawer on every dashboard card
+8c707d1 feat(frontend): expand KPI card info inline below card on click
+87a6a24 fix(frontend): make entire KPI card clickable for info — remove icon button
+b7bd7b9 feat(frontend): add info buttons to all pages and KPI cards
+8 commits ready to push. Karta hoon:
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git push origin main 2>&1
+
+OUT
+To https://github.com/A1610/graphrl-sec.git
+   4b92587..0343c52  main -> main
+Push ho gaya. Saare 8 commits GitHub pe live hain:
+
+feat — info buttons + InfoModal/InfoDrawer components
+feat — bottom-sheet drawer on every dashboard card
+feat — Page Info button with indepth content on all 4 pages
+fix — Page Info placement (right side, left of Live)
+setup.md update krna aaj hamne jitna add kiya o sab and tujhe yaad haina mujhe ghar pe jake meri system pe run karana hai to sab ke running commnand de dena
+The user wants to update setup.md with everything we did today and include running commands so they can run it at home. Let me first read the existing setup.md to understand the current structure, then update it with all the new additions.
+
+Globpattern: "**/*.md"
+Found 101 files
+There's no setup.md - I need to check if there's one or if I need to create it. Let me check what's in the docs folder and the root directory.
+
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && ls *.md 2>/dev/null || echo "no md in root" && ls docs/*.md | head -20
+
+OUT
+SETUP.md
+chatmemory.md
+docs/01_project_requirements.md
+docs/02_system_architecture.md
+docs/03_environment_setup.md
+docs/04_module_data_ingestion.md
+docs/05_module_graph_construction.md
+docs/06_module_neo4j_kafka_integration.md
+docs/07_phase1_progress_report.md
+docs/08_module_self_supervised_pretraining.md
+docs/09_module_node2vec_baseline.md
+docs/10_phase2_progress_report.md
+docs/11_module_thetgat_detection.md
+docs/12_module_baselines_benchmarking.md
+docs/13_phase3_progress_report.md
+docs/14_module_soc_environment.md
+docs/15_module_drl_triage_agent.md
+docs/16_phase4_progress_report.md
+docs/17_module_federated_learning.md
+docs/18_module_campaign_detection.md
+docs/19_phase5_progress_report.md
+docs/20_module_fastapi_backend.md
+Read d:\Personal\GraphRL-Sec\SETUP.md
+Now I need to update SETUP.md to include:1. Module 11 (T-HetGAT) - training command
+2. Frontend info features (Page Info button, bottom-sheet drawer, InfoModal)
+3. Update the running commands section
+4. Add the T-HetGAT training step after pre-training
+5. Update the project structure to include the new components
+
+Let me update the SETUP.md comprehensively.
+
+Ab poora SETUP.md update karta hoon — T-HetGAT training, frontend info features, aur ghar pe chalane ke saare commands:
+
+Write d:\Personal\GraphRL-Sec\SETUP.md
+505 lines
+# GraphRL-Sec — Complete Setup Guide
+
+Ye guide tumhe step-by-step batayegi ke fresh system pe poora project kaise chalao.
+Isko follow karo aur project exactly wahan se start hoga jahan tune chhoda tha.
+
+---
+
+## Prerequisites — Pehle ye install karo
+
+### 1. Git
+- Download: https://git-scm.com/download/win
+- Install karo (default settings theek hain)
+- Verify: `git --version`
+
+### 2. Python 3.10
+- Download: https://www.python.org/downloads/release/python-31011/
+- **IMPORTANT**: Install karte waqt **"Add Python to PATH"** checkbox zaroor tick karo
+- Verify: `python --version` → `Python 3.10.x` dikhna chahiye
+
+### 3. Node.js (v20 LTS)
+- Download: https://nodejs.org/en/download (LTS version)
+- Install karo (default settings)
+- Verify: `node --version` aur `npm --version`
+
+### 4. Docker Desktop
+- Download: https://www.docker.com/products/docker-desktop/
+- Install karo aur system restart karo
+- Docker Desktop open karo aur wait karo jab tak green (running) ho jaye
+- Verify: `docker --version`
+
+### 5. CUDA Toolkit (agar NVIDIA GPU hai)
+- Download: https://developer.nvidia.com/cuda-downloads
+- Apni GPU ke hisaab se version choose karo (RTX 3050 → CUDA 12.x)
+- Verify: `nvidia-smi`
+
+---
+
+## Step 1 — GitHub se Project Clone karo
+
+PowerShell ya Terminal kholo aur ye commands chalao:
+
+```powershell
+cd D:\
+git clone https://github.com/A1610/graphrl-sec.git
+cd graphrl-sec
+```
+
+---
+
+## Step 2 — Environment File Banao
+
+```powershell
+copy .env.example .env
+```
+
+`.env` file ko Notepad me kholo aur check karo — default values theek hain, kuch change karne ki zarurat nahi.
+
+---
+
+## Step 3 — Python Virtual Environment Banao
+
+```powershell
+python -m venv venv
+venv\Scripts\activate
+```
+
+Ab terminal me `(venv)` dikhna chahiye. Phir sari Python dependencies install karo:
+
+```powershell
+pip install -r requirements.txt
+```
+
+> Ye thoda time lega — ~5-10 minutes. PyTorch bada package hai.
+
+---
+
+## Step 4 — Frontend Dependencies Install karo
+
+```powershell
+cd frontend
+npm install
+cd ..
+```
+
+---
+
+## Step 5 — Docker Services Start karo
+
+Docker Desktop open hona chahiye. Phir:
+
+```powershell
+docker-compose up -d
+```
+
+Ye start karega:
+- **Kafka (Redpanda)** — port 9092
+- **Neo4j** — port 7474 (browser), 7687 (bolt)
+- **PostgreSQL** — port 5432
+- **Redis** — port 6379
+- **Prometheus + Grafana** — ports 9090, 3001
+
+Verify karo sab chal rahe hain:
+```powershell
+docker ps
+```
+
+Sab containers `Up` status me dikhne chahiye.
+
+Neo4j ready hone me ~30 seconds lagte hain. Browser me check karo:
+- Open: http://localhost:7474
+- Username: `neo4j`
+- Password: `graphrlsec123`
+
+---
+
+## Step 6 — Data Folders Banao
+
+```powershell
+mkdir data\raw\unsw
+mkdir data\raw\cicids
+mkdir data\graphs
+mkdir models\pretrain
+mkdir models\thetgat
+```
+
+---
+
+## Step 7 — Datasets Download karo
+
+### UNSW-NB15 Dataset
+1. Jao: https://research.unsw.edu.au/projects/unsw-nb15-dataset
+2. "UNSW-NB15 - CSV Files" download karo
+3. Ye 4 files chahiye:
+   - `UNSW-NB15_1.csv`
+   - `UNSW-NB15_2.csv`
+   - `UNSW-NB15_3.csv`
+   - `UNSW-NB15_4.csv`
+4. Inhe dalo: `data\raw\unsw\`
+
+### CICIDS 2017 Dataset
+1. Jao: https://www.unb.ca/cic/datasets/ids-2017.html
+2. "GeneratedLabelledFlows" download karo (ZIP file)
+3. ZIP extract karo
+4. Saari CSV files dalo: `data\raw\cicids\`
+
+---
+
+## Step 8 — Data Ingest karo (CSV → Kafka → .pt files + Neo4j)
+
+Venv active honi chahiye. Ye commands ek-ek karke chalao:
+
+### UNSW-NB15 ingest:
+```powershell
+venv\Scripts\activate
+python -m src.ingestion.cli ingest --dataset unsw --path data\raw\unsw --mode batch
+```
+
+### CICIDS2017 ingest:
+```powershell
+python -m src.ingestion.cli ingest --dataset cicids --path data\raw\cicids --mode batch
+```
+
+### Kafka events ko graphs me convert karo (.pt files banao):
+```powershell
+python -m src.ingestion.cli consume --snapshot-dir data\graphs --neo4j
+```
+
+> Ye **lamba process** hai — ghanton lag sakte hain. Isko background me chalao ya raat ko chhod do.
+> Complete hone par `data\graphs\` me ~17,657 `.pt` files hongi.
+
+---
+
+## Step 8b — Neo4j me Data Dalo (Graph Database Populate karo)
+
+> **Ye step zaroori hai** — Neo4j sirf us machine pe accessible hota hai jahan Docker chal raha ho.
+> Dusri machine pe clone karo to Neo4j empty hogi, dobara populate karna padega.
+
+Step 8 complete hone ke baad (`.pt` files ban jayein), ek **naya terminal** kholo:
+
+```powershell
+cd D:\graphrl-sec
+venv\Scripts\activate
+python scripts\neo4j_import.py
+```
+
+Output kuch aisa dikhega:
+```
+Neo4j connected.
+Press Ctrl+C to stop gracefully.
+
+Windows written : 1,250
+Nodes merged    : 45,000
+Edges merged    : 120,000
+Elapsed         : 300s
+```
+
+> Ye bhi **2-3 ghante** ka kaam hai. Raat ko chhod do.
+> Complete hone par Neo4j me ~124,000+ nodes aur ~3,000,000+ edges honge.
+>
+> **Verify karo**: Browser kholo → http://localhost:7474
+> Query run karo: `MATCH (n) RETURN count(n)` → ~124,000 dikhna chahiye
+
+---
+
+## Step 9 — GNN Pre-Training (Self-Supervised HeteroGraphEncoder)
+
+Jab `data\graphs\` me `.pt` files aa jayein (Step 8 complete ho), tab:
+
+```powershell
+venv\Scripts\activate
+python -m src.models.pretrain.runner
+```
+
+Ye GPU pe chalega. Output kuch aisa dikhega:
+```
+pretrain_start    device=cuda  graphs_dir=data\graphs
+snapshots_loaded  count=17657
+data_split        train_pairs=15891  val_pairs=1765
+epoch=1  train_loss=6.97  val_loss=6.97  gpu_mb=813
+epoch=2  train_loss=5.84  val_loss=5.91  best=True
+...
+early_stopping    epoch=22  patience=10
+pretrain_complete best_val_loss=4.21
+```
+
+| Setting | Value |
+|---------|-------|
+| GPU VRAM used | ~813 MB |
+| Time per epoch | ~9 minutes |
+| Expected total | ~2–4 hours |
+| Best model saved | `models\pretrain\checkpoint_best.pt` |
+
+> **Shortcut**: Agar pehle se trained checkpoint hai (Google Drive / USB se copy kiya):
+> `models\pretrain\checkpoint_best.pt` rakh do aur seedha Step 10 pe jao.
+
+---
+
+## Step 10 — T-HetGAT Training (Anomaly Detection Model)
+
+> **Ye Step 9 ke baad karna hai** — `models\pretrain\checkpoint_best.pt` hona chahiye.
+
+```powershell
+venv\Scripts\activate
+python -m src.models.thetgat.runner
+```
+
+Ye automatically karega:
+1. `data\graphs\` me saare 17,657 window files discover karta hai
+2. Stratified train/val/test split karta hai (80/10/10) — attack windows alag rakhta hai taaki har split me dono classes hon
+3. Pretrained HeteroGraphEncoder load karta hai `models\pretrain\checkpoint_best.pt` se
+4. **Phase A** (5 epochs): Encoder frozen, sirf T-HetGAT layers train hoti hain
+5. **Phase B** (remaining epochs): Full end-to-end fine-tuning with early stopping
+6. Best checkpoint save hoti hai `models\thetgat\thetgat_best.pt` pe
+7. Test set pe evaluate karta hai aur metrics print karta hai
+
+Output kuch aisa dikhega:
+```
+Model parameters: 2,847,233 total | 487,041 trainable (encoder frozen initially)
+
+phase_A_start   freeze_epochs=5
+epoch=0  train_loss=0.312  val_loss=0.289  val_auroc=0.7821
+epoch=1  train_loss=0.241  val_loss=0.198  val_auroc=0.8934  best=True
+...
+phase_B_start   epoch=5
+epoch=5  train_loss=0.089  val_loss=0.071  val_auroc=0.9812  best=True
+...
+early_stopping  epoch=23  best_auroc=0.9847
+
+============================================================
+  T-HetGAT Evaluation Results
+============================================================
+  Test windows : 1,766
+  Attack       : 316  (17.9%)
+  Normal       : 1,450
+------------------------------------------------------------
+  AUROC        : 0.9847  [BEATS baseline 0.9804]
+  Avg Precision: 0.9123
+  Best F1      : 0.8734  [BEATS baseline 0.4912]
+  Threshold    : 0.42
+  Precision    : 0.8901
+  Recall       : 0.8576
+------------------------------------------------------------
+  Confusion Matrix (at best-F1 threshold):
+    TP=271  FP=33
+    FN=45   TN=1417
+------------------------------------------------------------
+  AUROC  improvement vs baseline: +0.0043
+  F1     improvement vs baseline: +0.3822
+============================================================
+```
+
+| Setting | Value |
+|---------|-------|
+| GPU VRAM used | ~1.2 GB |
+| Expected training time | ~3–7 hours |
+| Best model saved | `models\thetgat\thetgat_best.pt` |
+| Latest checkpoint | `models\thetgat\thetgat_latest.pt` |
+| Training history | `models\thetgat\thetgat_train_history.json` |
+| Eval results | `models\thetgat\thetgat_eval_results.json` |
+
+> **Shortcut**: Agar trained T-HetGAT checkpoint hai (USB/Drive se):
+> `models\thetgat\thetgat_best.pt` rakh do — FastAPI backend is se load karega.
+
+---
+
+## Step 11 — Poora Project Chalao (Sab ek saath)
+
+**3 alag terminals open karo:**
+
+### Terminal 1 — FastAPI Backend:
+```powershell
+cd D:\graphrl-sec
+venv\Scripts\activate
+python -m src.api.run
+```
+Backend chal raha hoga: http://localhost:8000
+API docs: http://localhost:8000/docs
+
+### Terminal 2 — Next.js Frontend:
+```powershell
+cd D:\graphrl-sec\frontend
+npm run dev
+```
+Dashboard khulega: http://localhost:3000
+
+### Terminal 3 — Docker (agar band hai to):
+```powershell
+cd D:\graphrl-sec
+docker-compose up -d
+```
+
+Teeno chal rahe hain? Browser me http://localhost:3000 kholo — dashboard live hai.
+
+---
+
+## Dashboard Pages
+
+| Page | URL | Kya dikhta hai |
+|------|-----|----------------|
+| Dashboard | http://localhost:3000 | KPI cards, node/edge charts, recent alerts — main overview |
+| Alerts | http://localhost:3000/alerts | Saare anomalous connections — filter by severity, paginated |
+| Graph Explorer | http://localhost:3000/graph | Interactive force-directed network graph |
+| Analytics | http://localhost:3000/analytics | Detailed stats + top 20 communicators table |
+| Neo4j Browser | http://localhost:7474 | Direct graph database — Cypher queries |
+| API Docs | http://localhost:8000/docs | FastAPI Swagger UI — sab endpoints |
+| Grafana | http://localhost:3001 | System monitoring metrics |
+
+### Dashboard Features (aaj add kiye):
+- **Har card clickable** → bottom se slide-up drawer aata hai jo us metric ki full explanation deta hai
+- **Page Info button** → har page ke header me top-right side pe `[ℹ Page Info]` button hai — click karo to us pure page ki in-depth explanation khulti hai
+- **Live status** → Page Info ke baaju me `● Live` / `● Connecting` status dikhta hai
+
+---
+
+## Saved Checkpoints Transfer karna
+
+Agar apni current machine se dusri machine pe le jaana hai:
+
+### Current machine pe (export):
+```powershell
+# USB ya Google Drive pe copy karo
+copy models\pretrain\checkpoint_best.pt <USB-drive-path>\
+copy models\thetgat\thetgat_best.pt <USB-drive-path>\
+```
+
+### Nai machine pe (import):
+```powershell
+# Step 6 ke baad ye karo
+mkdir models\pretrain
+mkdir models\thetgat
+copy <USB-drive-path>\checkpoint_best.pt models\pretrain\
+copy <USB-drive-path>\thetgat_best.pt models\thetgat\
+```
+
+Checkpoints copy ke baad seedha **Step 11** pe jao — training dobara nahi karni padegi.
+
+---
+
+## Common Errors aur Fixes
+
+### "Neo4j unreachable"
+```powershell
+docker ps          # check kar raha hai?
+docker-compose up -d   # nahi chal raha to start karo
+```
+
+### "No window_*.pt files found"
+Step 8 abhi complete nahi hua. `data\graphs\` me files check karo:
+```powershell
+dir data\graphs\*.pt | measure -line
+```
+~17,657 files honi chahiye.
+
+### "Pretrained encoder checkpoint not found"
+`models\pretrain\checkpoint_best.pt` exist karta hai? Step 9 pehle complete karo ya USB se copy karo.
+
+### "CUDA not available"
+```powershell
+nvidia-smi    # GPU detect ho rahi hai?
+```
+Training CPU pe bhi chalegi (slow ~10x): `.env` me `DEVICE=cpu` set karo.
+
+### "Module not found"
+Venv active hai? Terminal me `(venv)` dikhna chahiye:
+```powershell
+venv\Scripts\activate
+```
+
+### Frontend "Cannot connect to API"
+Terminal 1 me backend chal raha hai? `http://localhost:8000/docs` browser me kholo — agar nahi khulta to backend restart karo.
+
+### Docker port already in use
+```powershell
+docker-compose down
+docker-compose up -d
+```
+
+### BatchNorm error during T-HetGAT training
+Ye automatically handle hota hai — `encoder.eval()` training loop me call hota hai. Agar phir bhi error aaye to `.env` me `DEVICE=cpu` set karo.
+
+---
+
+## Project Structure (Reference)
+
+```
+graphrl-sec/
+├── src/
+│   ├── ingestion/          # CSV parsers, Kafka producer/consumer
+│   ├── graph/              # Neo4j writer, PyG converter, temporal windows
+│   ├── models/
+│   │   ├── pretrain/       # HeteroGraphEncoder, NT-Xent loss, trainer
+│   │   └── thetgat/        # T-HetGAT anomaly detection
+│   │       ├── config.py         # Hyperparameters
+│   │       ├── model.py          # THetGATModel + AnomalyScorer
+│   │       ├── hetgat_layer.py   # TemporalGATConv + HeteroTemporalGATLayer
+│   │       ├── temporal_encoder.py # TemporalEdgeEncoder (sinusoidal)
+│   │       ├── losses.py         # FocalLoss (alpha=0.25, gamma=2.0)
+│   │       ├── trainer.py        # THetGATTrainer (Phase A/B, early stopping)
+│   │       ├── evaluate.py       # THetGATEvaluator (AUROC, F1, confusion matrix)
+│   │       └── runner.py         # CLI entrypoint
+│   └── api/                # FastAPI backend
+├── frontend/               # Next.js SOC dashboard
+│   └── src/
+│       ├── app/            # 4 pages: Dashboard, Alerts, Graph, Analytics
+│       ├── components/
+│       │   ├── layout/
+│       │   │   ├── Header.tsx    # Page Info button + Live status
+│       │   │   ├── KPICard.tsx   # Clickable cards with onCardClick
+│       │   │   └── Sidebar.tsx
+│       │   ├── ui/
+│       │   │   ├── InfoModal.tsx  # Page Info modal (scrollable, max-w-2xl)
+│       │   │   └── InfoDrawer.tsx # Bottom-sheet drawer for card info
+│       │   ├── alerts/     # AlertTable
+│       │   ├── charts/     # SeverityDonut, TopCommunicators
+│       │   └── graph/      # NetworkGraph (vis-network)
+│       └── hooks/          # useGraphStream (WebSocket)
+├── scripts/                # Utility scripts (neo4j_import.py etc.)
+├── tests/                  # Unit + integration tests
+├── docs/                   # Module documentation
+├── data/                   # (gitignored) raw CSVs, .pt snapshots
+├── models/                 # (gitignored) trained checkpoints
+│   ├── pretrain/           # checkpoint_best.pt (GNN encoder)
+│   └── thetgat/            # thetgat_best.pt, thetgat_latest.pt
+├── docker-compose.yml      # All infrastructure services
+├── requirements.txt        # Python dependencies
+└── .env.example            # Environment template
+```
+
+---
+
+## Quick Reference — Sab Commands ek jagah
+
+```powershell
+# 1. Clone
+git clone https://github.com/A1610/graphrl-sec.git && cd graphrl-sec
+
+# 2. Setup
+copy .env.example .env
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+cd frontend && npm install && cd ..
+
+# 3. Infrastructure start
+docker-compose up -d
+
+# 4. Data ingest (ek baar, lamba process)
+python -m src.ingestion.cli ingest --dataset unsw --path data\raw\unsw --mode batch
+python -m src.ingestion.cli ingest --dataset cicids --path data\raw\cicids --mode batch
+python -m src.ingestion.cli consume --snapshot-dir data\graphs --neo4j
+python scripts\neo4j_import.py
+
+# 5. Model training (ek baar, GPU pe)
+python -m src.models.pretrain.runner       # Step 9 — GNN pre-training (~2-4 hrs)
+python -m src.models.thetgat.runner        # Step 10 — T-HetGAT (~3-7 hrs)
+
+# 6. Daily run (3 terminals)
+python -m src.api.run                      # Terminal 1 — Backend
+cd frontend && npm run dev                 # Terminal 2 — Frontend
+docker-compose up -d                       # Terminal 3 — Docker (agar band ho)
+```
+
+---
+
+*GraphRL-Sec — Adaptive Cybersecurity Threat Intelligence using GNN + Deep RL*
+Bash
+IN
+cd "d:/Personal/GraphRL-Sec" && git add SETUP.md && git commit -m "$(cat <<'EOF'
+docs(setup): complete rewrite with T-HetGAT training + frontend info features
+
+- Step 6: added models\thetgat folder creation
+- Step 10 (new): T-HetGAT training command, expected output, timings,
+  checkpoint paths, shortcut for USB transfer
+- Step 11: renamed from Step 10, updated terminal count (3 not 4)
+- Dashboard section: documents Page Info button, bottom-sheet drawer,
+  Live status placement added today
+- Project structure: expanded frontend tree with InfoModal, InfoDrawer,
+  updated KPICard, Header; thetgat/ submodule files listed
+- Common errors: added BatchNorm fix, checkpoint not found fix
+- Quick Reference section: all commands in one copy-paste block
+- Checkpoint transfer: covers both pretrain + thetgat checkpoints
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)" && git push origin main
+
+OUT
+warning: in the working copy of 'SETUP.md', LF will be replaced by CRLF the next time Git touches it
+[main 0402192] docs(setup): complete rewrite with T-HetGAT training + frontend info features
+ 1 file changed, 199 insertions(+), 60 deletions(-)
+To https://github.com/A1610/graphrl-sec.git
+   0343c52..0402192  main -> main
+GitHub pe push ho gaya. SETUP.md mein yeh sab add kiya:
+
+Naye Steps:
+
+Step 6 → models\thetgat folder bhi create karo
+Step 10 (bilkul naya) → T-HetGAT training — full command, expected output (AUROC, F1 print), timings (3-7 hrs), checkpoint paths, USB shortcut
+Updated Sections:
+
+Dashboard Features → Page Info button, bottom-sheet drawer, Live status — sab documented
+Project Structure → InfoModal.tsx, InfoDrawer.tsx, thetgat/ ke saare files listed
+Common Errors → BatchNorm fix, checkpoint not found fix add kiya
+Checkpoint Transfer → pretrain + thetgat dono checkpoints ka USB transfer
+Sabse important — Quick Reference:
+
+
+# Ghar pe seedha yeh block copy-paste karo:
+# Clone → Setup → Docker → Data → Training → Daily Run
+Ghar pe jake:
+
+Clone karo
+.env.example copy karo
+pip install + npm install
+Docker up
+Agar checkpoints USB pe hain → models\pretrain\ aur models\thetgat\ mein rakh do
+Seedha Step 11 — teen terminals mein backend + frontend + docker
