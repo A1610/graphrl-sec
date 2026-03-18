@@ -219,9 +219,46 @@ def main() -> None:
         pretrain_val_loss=ckpt_info.get("val_loss"),
     )
 
-    # ── 5. Count parameters ───────────────────────────────────────────
-    total_params    = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # ── 5. Materialise lazy layers + count parameters ─────────────────
+    # HeteroGraphEncoder uses LazyLinear (input projections) and
+    # SAGEConv(-1,-1) (message-passing layers) — both require a forward
+    # pass with matching data to initialise their weight shapes.
+    # We scan training windows until every node type AND every edge type
+    # in the full metadata has been seen at least once.
+    log.info("materialising_lazy_layers")
+    model.eval()
+    remaining_nodes = set(metadata[0])
+    remaining_edges = set(metadata[1])
+    with torch.no_grad():
+        for _p in train_paths:
+            if not remaining_nodes and not remaining_edges:
+                break
+            _d = torch.load(_p, map_location=device, weights_only=False)
+            new_nodes = set(_d.node_types) & remaining_nodes
+            new_edges = set(_d.edge_types) & remaining_edges
+            if new_nodes or new_edges:
+                _ = model(_d)
+                remaining_nodes -= new_nodes
+                remaining_edges -= new_edges
+    model.train()
+    if remaining_nodes or remaining_edges:
+        log.warning(
+            "lazy_init_incomplete",
+            unseen_node_types=list(remaining_nodes),
+            unseen_edge_types=list(remaining_edges),
+        )
+
+    # Skip any still-uninitialized LazyModule parameters in the count —
+    # they will be materialised on first use during training.
+    _uninit = torch.nn.parameter.UninitializedParameter
+    total_params    = sum(
+        p.numel() for p in model.parameters()
+        if not isinstance(p, _uninit)
+    )
+    trainable_params = sum(
+        p.numel() for p in model.parameters()
+        if p.requires_grad and not isinstance(p, _uninit)
+    )
     print(f"\nModel parameters: {total_params:,} total | "
           f"{trainable_params:,} trainable (encoder frozen initially)\n")
 
