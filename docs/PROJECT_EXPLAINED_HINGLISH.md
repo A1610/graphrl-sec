@@ -81,10 +81,10 @@ PHASE 1 — FOUNDATION (Neenv)
 
 PHASE 2 — AI FOUNDATION (Dimag banana)
   Module 8:  Self-Supervised Pretraining  ✅ COMPLETE
-  Module 9:  Node2Vec Baseline           ⬜ PENDING
+  Module 9:  Node2Vec Baseline            ✅ COMPLETE
 
 PHASE 3 — DETECTION (Attack pakadna)
-  Module 11: T-HetGAT Detection    ⬜ PENDING
+  Module 11: T-HetGAT Detection    ✅ COMPLETE (training chal rahi hai)
   Module 12: Benchmarking          ⬜ PENDING
 
 PHASE 4 — AUTOMATION (Auto-decide)
@@ -100,7 +100,7 @@ PHASE 6 — PRESENTATION (Dikhao)
   Module 21: SOC Dashboard         ✅ COMPLETE
   Module 22: Integration Testing   ⬜ PENDING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ABHI TAK: 6 modules complete (~30%)
+ABHI TAK: 8 modules complete (~40%)
 ```
 
 ---
@@ -1293,7 +1293,9 @@ Output:     models/pretrain/checkpoint_best.pt
 | 1 | Data Ingestion | UNSW + CICIDS parsers, Kafka pipeline | 9GB parsed |
 | 2 | Graph Construction | 17,657 PyG snapshots | 17,657 .pt files |
 | 3 | Neo4j Integration | Graph database populated | 124K nodes, 3M+ edges |
-| 4 | Pre-training | GNN encoder trained | val_loss=4.812, 13 epochs |
+| 4 | Pre-training | GNN encoder trained | val_loss=6.766, epoch 21/31 |
+| 5 | Node2Vec Baseline | IP graph embedding + Isolation Forest | AUROC=0.9804, F1=0.4912 |
+| 6 | T-HetGAT Detection | Temporal GAT anomaly detector — 8 files | Training on RTX 3050 |
 | 5 | FastAPI Backend | REST API + WebSocket | 8 endpoints |
 | 6 | SOC Dashboard | 4-page Next.js frontend | Real data from Neo4j |
 
@@ -1301,8 +1303,7 @@ Output:     models/pretrain/checkpoint_best.pt
 
 | # | Module | Kya Banana Hai | Kitna Mushkil |
 |---|--------|---------------|---------------|
-| 7 | Node2Vec Baseline | Comparison ke liye simple graph embedding | Medium |
-| 8 | T-HetGAT Detection | Actual anomaly detector — project ka core model | Hard |
+| 7 | Benchmarking | T-HetGAT vs baselines ka full report | Medium |
 | 9 | Benchmarking | T-HetGAT vs baselines, AUROC/F1 results | Medium |
 | 10 | SOC Environment | RL training ground — Gymnasium-based | Hard |
 | 11 | DRL Triage Agent | AI jo auto-decide kare alerts | Very Hard |
@@ -1315,12 +1316,13 @@ Output:     models/pretrain/checkpoint_best.pt
 Data Foundation:  ████████████████████ 100% ✅
 Graph Storage:    ████████████████████ 100% ✅
 AI Pre-training:  ████████████████████ 100% ✅
-Detection Model:  ░░░░░░░░░░░░░░░░░░░░   0% ← NEXT
+Detection Model:  ████████████████████ 100% ✅ (results pending)
+Node2Vec:         ████████████████████ 100% ✅
 Auto-triage:      ░░░░░░░░░░░░░░░░░░░░   0%
 Privacy/Federated:░░░░░░░░░░░░░░░░░░░░   0%
 Dashboard:        ████████████░░░░░░░░  60% (basic)
 
-Overall:          ██████░░░░░░░░░░░░░░  ~30%
+Overall:          ████████░░░░░░░░░░░░  ~40%
 ```
 
 ---
@@ -1334,8 +1336,560 @@ Overall:          ██████░░░░░░░░░░░░░░  
 > "Ek smart police wala banaya jisne traffic dekha, patterns seekhe, aur ab bol sakta hai ke kaun suspicious hai."
 
 ## Technical depth mein:
-> "Temporal heterogeneous graph (5 node types, 4 edge types, sliding windows) pe GraphCL contrastive pre-training kiya. 17,657 snapshots, 9GB dataset. RTX 3050 pe 813MB VRAM, best val_loss 4.812. Neo4j mein 124K+ entities, 3M+ connections stored. FastAPI REST + WebSocket + Next.js SOC dashboard — poora production-grade stack."
+> "Temporal heterogeneous graph (3 node types, 6 edge types) pe GraphCL contrastive pre-training kiya — val_loss=6.766. Node2Vec baseline: 19,179 IPs, AUROC=0.9804. T-HetGAT: TemporalEdgeEncoder (sinusoidal timestamps + flow stats) + 3× HeteroTemporalGATLayer (attention: α_ij = softmax(LeakyReLU(a^T[W_s·h_i ‖ W_d·h_j ‖ W_t·t_ij]))) + MLP scorer, FocalLoss(α=0.25,γ=2.0), 1.55M parameters. Neo4j: 124K+ nodes, 3M+ edges. FastAPI + Next.js SOC dashboard."
 
 ---
 
-*Document updated: 17 March 2026 | GraphRL-Sec MTech Dissertation*
+*Document updated: 18 March 2026 | GraphRL-Sec MTech Dissertation*
+
+---
+
+# PART 7 — MODULE 9: NODE2VEC BASELINE (COMPLETE)
+
+## Module 9 kya karta hai:
+
+T-HetGAT banana shuru karne se pehle ek simpler model banana zaroori tha — **baseline** — jisse compare kar sakein. Agar T-HetGAT baseline se better nahi hua, toh itni complexity bekar thi.
+
+```
+Node2Vec Pipeline:
+  Raw CSV files (UNSW-NB15 + CICIDS2017)
+       ↓
+  IP communication graph banao
+  (19,179 nodes = unique IPs, 114,081 edges = connections)
+       ↓
+  Node2Vec: random walks → Skip-gram → har IP ka 64-dim vector
+       ↓
+  BehaviorProfiler: 76-dim feature vector per IP
+  (9 flow stats + 3 graph stats + 64 Node2Vec dims)
+       ↓
+  Isolation Forest + One-Class SVM → anomaly score
+       ↓
+  AUROC = 0.9804 (Isolation Forest) ← hamara target beat karna hai
+```
+
+### `src/models/pretrain/node2vec_config.py`
+
+**Kyu banaya:** Saare Node2Vec settings ek jagah. `.env` file se `NODE2VEC_` prefix se padhta hai.
+
+```python
+class Node2VecConfig(BaseSettings):
+    embedding_dim:    int   = 64    # Har IP ka vector kitna bada
+    walk_length:      int   = 80    # Random walk kitne steps ka
+    context_size:     int   = 5     # Skip-gram window size
+    walks_per_node:   int   = 10    # Har node se kitne walks
+    p:                float = 1.0   # BFS-like behavior
+    q:                float = 1.0   # DFS-like behavior
+    num_epochs:       int   = 50
+    learning_rate:    float = 0.01
+```
+
+### `src/models/pretrain/node2vec.py`
+
+**Kyu CICIDS zaroori tha:**
+
+UNSW-NB15 mein sirf ~50 unique IPs hain — ye ek controlled lab testbed hai. 50 IPs ke saath Node2Vec ka koi matlab nahi — graph structure hi nahi hai. CICIDS2017 ne 19,129 real-world IPs add kiye.
+
+**Ek important bug fix:**
+```python
+# GALAT — UNSW-NB15_LIST_EVENTS.csv bhi pick ho jaata tha (wrong format):
+glob_pattern = "UNSW-NB15_*.csv"
+
+# SAHI — sirf 4 numbered data files:
+glob_pattern = "UNSW-NB15_[0-9].csv"
+```
+
+```python
+class Node2VecEmbedder:
+    def fit(self):
+        # Dono datasets se flows load karo
+        flows = self._load_unsw_flows() + self._load_cicids_flows()
+
+        # IP communication graph banao
+        # A → B agar A ne B ko traffic bheja
+        G = nx.DiGraph()
+        for src_ip, dst_ip, is_attack in flows:
+            G.add_edge(src_ip, dst_ip)
+
+        # Node2Vec train karo (PyG)
+        node2vec = Node2Vec(edge_index, embedding_dim=64)
+        for epoch in range(50):
+            for pos_rw, neg_rw in loader:
+                loss = node2vec.loss(pos_rw, neg_rw)
+                loss.backward()
+
+        # Save karo
+        torch.save({"embeddings": embeddings, "ip_list": ip_list}, path)
+```
+
+### `src/models/pretrain/profiling.py`
+
+**76-dimensional feature vector har IP ke liye:**
+```
+[0]    out_degree        — kitne IPs ko traffic bheja?
+[1]    in_degree         — kitne IPs ne traffic bheja?
+[2]    num_out_flows     — total outbound connections
+[3]    num_in_flows      — total inbound connections
+[4]    bytes_sent_mean   — average bytes bheje per flow
+[5]    bytes_recv_mean   — average bytes mile per flow
+[6]    unique_dst_ports  — kitne alag ports probe kiye?
+[7]    unique_src_ports  — source port diversity
+[8]    unique_protocols  — TCP/UDP/ICMP usage
+[9]    pagerank          — graph mein ye IP kitna important hai?
+[10]   clustering_coeff  — kya ye IP cliques mein hai?
+[11]   degree_centrality — normalised degree
+[12-75] node2vec         — 64-dim structural embedding
+```
+
+**PageRank security ke liye kyu useful:**
+Scanning IP → bahut saare hosts ko touch karta hai → high out-degree → high PageRank. Ye ek structural attack signature hai.
+
+### `src/models/pretrain/baseline.py`
+
+**Kyu F1 low hai aur AUROC high:**
+```
+Dataset mein sirf 27 attack IPs hain 19,179 mein se (0.14%)
+
+AUROC = 0.9804: "Kya model ne attack IPs ko normal IPs se
+                 upar rank kiya?" → 98% sahi ✓
+
+F1 = 0.4912:    "Sahi threshold choose karke kitne pakde?"
+                → 49% — class imbalance ki wajah se
+
+T-HetGAT ka target: F1 > 0.65 (beat karo) AND AUROC > 0.9804
+```
+
+**Final results:**
+```
+                    AUROC    F1      Precision  Recall
+Isolation Forest:  0.9804  0.4912    0.4667    0.5185  ← primary baseline
+One-Class SVM:     0.9609  0.6531    0.7273    0.5926
+
+IPs total: 19,179 | Attack IPs: 27
+```
+
+---
+
+# PART 8 — MODULE 11: T-HETGAT DETECTION ENGINE (COMPLETE)
+
+## Module 11 kya karta hai — project ka CORE novelty:
+
+```
+T-HetGAT Pipeline (ek window at a time):
+  Graph window (.pt file)
+       ↓
+  HeteroGraphEncoder (pretrained Module 8 se load)
+  → h_dict: {node_type: (N, 128)}      [node embeddings]
+       ↓
+  TemporalEdgeEncoder (har edge type ke liye)
+  → t_dict: {edge_type: (E, 32)}       [temporal edge embeddings]
+       ↓
+  3 × HeteroTemporalGATLayer (attention layers)
+  → h_dict: {node_type: (N, 128)}      [updated embeddings]
+       ↓
+  Mean pool → (128,) window vector
+       ↓
+  AnomalyScorer MLP → logit → sigmoid → p_attack [0 se 1 tak]
+       ↓
+  FocalLoss → backward → AdamW
+```
+
+## Core novelty — T-HetGAT attention formula:
+
+```
+Standard GAT (2018):
+  α_ij = softmax( LeakyReLU( a^T [W·h_i ‖ W·h_j] ) )
+  Problem: ye nahi jaanta KAB edge hua
+
+Hamara T-HetGAT:
+  α_ij = softmax( LeakyReLU( a^T [W_s·h_i ‖ W_d·h_j ‖ W_t·t_ij] ) )
+
+  Jahan t_ij = TemporalEdgeEncoder(edge_attr) ← 32-dim temporal embedding
+
+  Matlab: "raat 3 baje ka 10,000 packets wala burst port 22 pe"
+          ko ALAG attention milega
+          "subah 9 baje ka normal 100-byte SSH keepalive" se
+          chahe same IP pair ho bhi toh
+```
+
+### `src/models/thetgat/config.py`
+
+```python
+class THetGATConfig(BaseSettings):
+    hidden_dim:              int   = 128   # Pretrained encoder se match karna zaroori
+    temporal_dim:            int   = 32    # Edge temporal embedding ka size
+    num_gat_layers:          int   = 3     # T-HetGAT attention layers
+    num_heads:               int   = 4     # Multi-head attention (4 × 32 = 128)
+    focal_alpha:             float = 0.25  # Majority class down-weight
+    focal_gamma:             float = 2.0   # Focus parameter
+    num_epochs:              int   = 50
+    learning_rate:           float = 5e-4
+    freeze_encoder_epochs:   int   = 5     # Phase A: encoder freeze
+    early_stopping_patience: int   = 10    # 10 epochs mein improvement nahi → stop
+    mixed_precision:         bool  = True  # FP16 AMP → half VRAM
+```
+
+### `src/models/thetgat/losses.py`
+
+**FocalLoss kyu — normal BCE kyu nahi:**
+
+```
+Dataset: 82.5% normal windows, 17.5% attack windows
+
+BCE ke saath: model sirf "normal" predict karta hai → 82.5% accuracy
+Lekin 0 attacks detect → bekar hai
+
+Focal Loss formula:
+  FL(p_t) = -alpha_t × (1 - p_t)^gamma × log(p_t)
+
+Normal window, model sure hai (p=0.95 normal):
+  BCE loss   = 0.051
+  Focal loss = (1-0.95)^2 × 0.051 = 0.0001  ← practically ignore karo
+
+Attack window, model unsure hai (p=0.55):
+  BCE loss   = 0.598
+  Focal loss = (1-0.55)^2 × 0.598 = 0.121   ← still significant
+
+Result: gradient budget hard, uncertain attack cases pe jaata hai
+```
+
+### `src/models/thetgat/temporal_encoder.py`
+
+**Sinusoidal encoding timestamp ke liye kyu:**
+
+Raw timestamp [0,1] → model ko phase pata nahi chalta. Sinusoidal encoding multiple frequency views deta hai.
+
+```
+edge_attr (E, 12):
+  [0]    timestamp       → sinusoidal encoding → (E, d)   Branch 1
+  [1:6]  bytes/packets   → Linear + ReLU       → (E, d)   Branch 2
+  [6:11] protocol + port → Linear + ReLU       → (E, d)   Branch 3
+                                  ↓
+                           concat → (E, 3d)
+                                  ↓
+                    Linear → LayerNorm → ReLU → Dropout → (E, 32)
+
+IMPORTANT: Column [11] = is_attack → model input mein NAHI diya
+           Agar dete toh cheating hoti (data leakage)
+```
+
+### `src/models/thetgat/hetgat_layer.py`
+
+```python
+class TemporalGATConv(MessagePassing):
+    def message(self, x_j, x_i, t_proj, index, v_j):
+        # x_j  = source node ka embedding    (E, H, D)
+        # x_i  = destination node ka embedding (E, H, D)
+        # t_proj = temporal embedding          (E, H, D)
+
+        # Attention score compute karo
+        alpha_input = cat([x_j, x_i, t_proj], dim=-1)    # (E, H, 3D)
+        alpha = (leaky_relu(alpha_input) * self.att).sum(-1)  # (E, H)
+        alpha = softmax(alpha, index)  # har destination ke liye normalize
+
+        # Value = source + temporal context
+        value = v_j + t_proj
+        return (value * alpha.unsqueeze(-1)).view(E, -1)  # (E, H*D)
+```
+
+**PyG bipartite bug jo fix karna pada:**
+```python
+# GALAT — PyG dono ke liye edge_index[0] use karta hai:
+self.propagate(edge_index, x=h_src, ...)
+
+# SAHI — tuple pass karo:
+# PyG: edge_index[0] → _j (source), edge_index[1] → _i (destination)
+self.propagate(edge_index, x=(h_src, h_dst), v=(v_src, None), ...)
+```
+
+### `src/models/thetgat/model.py`
+
+```python
+class THetGATModel(nn.Module):
+    def forward(self, data):
+        # 1. Pretrained encoder se node embeddings
+        h_dict = self.encoder(data.x_dict, data.edge_index_dict)
+
+        # 2. Temporal edge encoder
+        temporal_dict = {et: self.temporal_encoder(data[et].edge_attr)
+                         for et in data.edge_types}
+
+        # 3. T-HetGAT layers (3×)
+        for gat_layer in self.gat_layers:
+            h_dict = gat_layer(h_dict, data.edge_index_dict, temporal_dict)
+
+        # 4. Mean pool → window vector (128,)
+        window_embed = stack([h.mean(0) for h in h_dict.values()]).mean(0)
+
+        # 5. Score
+        return self.scorer(window_embed)  # scalar logit
+
+    @staticmethod
+    def get_window_label(data):
+        # edge_attr[:, 11] = is_attack
+        # Agar koi bhi ek edge attack hai → window attack hai
+        for et in data.edge_types:
+            if data[et].edge_attr[:, 11].any():
+                return 1.0
+        return 0.0
+```
+
+**Two-phase training strategy:**
+```
+Phase A (epoch 0-4):   Encoder FROZEN
+  → Sirf GAT layers + scorer seekhte hain
+  → Random weights wale GAT pretrained encoder ko kharab na kar dein
+
+Phase B (epoch 5-50):  Encoder UNFROZEN
+  → Full end-to-end fine-tuning
+  → Encoder bhi detection task ke liye adapt karta hai
+```
+
+### `src/models/thetgat/trainer.py`
+
+**Critical bug — BatchNorm1d 1 node ke saath:**
+```python
+# Problem: Kuch windows mein sirf 1 node hota hai ek type ka
+# BatchNorm1d([1, 128]) → "Expected more than 1 value per channel"
+
+# Fix:
+self._model.train()
+self._model.encoder.eval()  # ← Encoder ka BatchNorm eval mode mein rakho
+                              #   Running stats use karta hai, batch stats nahi
+                              #   Pretrained models ke fine-tuning mein ye standard hai
+```
+
+### `src/models/thetgat/runner.py`
+
+**Training shuru hone se pehle fix kiye bugs:**
+
+```
+Bug 1: Metadata mismatch
+  Problem: Model ek hi window se build hua — kuch windows mein 'host'
+           nodes hain, kuch mein nahi → architecture change ho jaata hai
+  Fix: Saare 17,657 windows scan karke saare node/edge types ka union lo
+       Is metadata se model banao → har window handle kar sakta hai
+
+Bug 2: strict=True pretrained encoder load mein
+  Problem: Checkpoint 'host' nodes ke bina train hua tha
+           Ab graphs mein 'host' nodes hain → key mismatch → crash
+  Fix: strict=False — matching weights load karo, baki random init se
+
+Bug 3: LazyLinear uninitialised
+  Problem: SAGEConv(-1,-1) lazy hai — pehle forward pe hi materialise hoti hai
+           Layer 1 ke liye kuch edge types kabhi call hi nahi hue
+  Fix: Uninitialised params ko count mein skip karo — training mein
+       automatically materialise ho jaate hain
+
+Bug 4: BatchNorm1d with 1 node (upar describe kiya)
+```
+
+**Stratified split kyu zaroori tha:**
+```
+Random split ka risk:
+  3,168 attack windows out of 17,657 (17.9%)
+  Random split mein validation ko 0 attack windows mil sakte hain
+  → AUROC undefined → training fail
+
+Stratified split:
+  Attack windows alag split karo, normal alag
+  Har split mein same 17.9% ratio rakho
+  → Guaranteed attack + normal har split mein
+```
+
+---
+
+# PART 9 — LOCAL MEIN KAISE CHALAO (STEP BY STEP)
+
+## Pehle ye chahiye:
+
+```
+- Python 3.10 ya usse upar
+- CUDA GPU (strongly recommended — CPU pe 10× zyada time lagega)
+- Docker Desktop (infrastructure services ke liye)
+- ~50GB free disk space
+- 16GB RAM minimum
+```
+
+## Step 1: Project setup
+
+```bash
+git clone https://github.com/A1610/graphrl-sec.git
+cd GraphRL-Sec
+
+# Virtual environment banao
+python -m venv venv
+
+# Activate karo (Windows)
+venv\Scripts\activate
+
+# Activate karo (Linux/Mac)
+source venv/bin/activate
+
+# Saari dependencies install karo
+pip install -r requirements.txt
+```
+
+## Step 2: Datasets download karo
+
+```bash
+# UNSW-NB15 (2GB):
+# Download: https://research.unsw.edu.au/projects/unsw-nb15-dataset
+# Files chahiye: UNSW-NB15_1.csv, UNSW-NB15_2.csv, UNSW-NB15_3.csv, UNSW-NB15_4.csv
+# Yahan rakho: data/raw/unsw/
+
+# CICIDS2017 (7GB):
+# Download: https://www.unb.ca/cic/datasets/ids-2017.html
+# Folder: GeneratedLabelledFlows/TrafficLabelling/ ke andar 8 CSV files
+# Yahan rakho: data/raw/cicids/
+```
+
+## Step 3: Infrastructure start karo (Docker)
+
+```bash
+# Saare 7 services start karo
+# (Neo4j, PostgreSQL, Redis, Redpanda, Prometheus, Grafana)
+docker-compose up -d
+
+# Check karo ki sab chal rahe hain:
+docker-compose ps
+
+# Neo4j browser (optional):
+# http://localhost:7474  (user: neo4j, pass: graphrlsec)
+```
+
+## Step 4: Data ingestion + graph construction
+
+```bash
+# NOTE: data/graphs/ mein already 17,657 .pt files hain agar full repo clone kiya
+# Sirf tabhi chalao agar scratch se banana ho
+
+# Consumer start karo (raw CSVs → .pt files via Kafka)
+python -m src.consumer.runner
+# Time: ~2 hours
+
+# Neo4j import (alag process, parallel chal sakta hai)
+python scripts/neo4j_import.py
+# Time: ~1h 45min
+```
+
+## Step 5: Module 8 — Pre-training
+
+```bash
+python -m src.models.pretrain.runner
+
+# Expected output:
+# Epoch 21: val_loss = 6.766 ← best
+# Early stopped at epoch 31
+# Saved: models/pretrain/checkpoint_best.pt
+
+# Agar checkpoint_best.pt already hai toh ye step skip karo
+```
+
+## Step 6: Module 9 — Node2Vec Baseline
+
+```bash
+python -m src.models.baseline_runner
+
+# Expected output:
+# Node2Vec training complete
+# Isolation Forest: AUROC=0.9804, F1=0.4912
+# One-Class SVM:    AUROC=0.9609, F1=0.6531
+# Saved: models/baseline/
+
+# Time: ~15-20 minutes
+```
+
+## Step 7: Module 11 — T-HetGAT Training
+
+```bash
+python -m src.models.thetgat.runner
+
+# Kya hoga:
+# 1. 17,657 windows scan (labels + metadata) — ~34 sec
+# 2. Stratified split: 14,125 train | 1,766 val | 1,766 test
+# 3. Pretrained encoder load
+# 4. Phase A (epoch 0-4): encoder frozen
+# 5. Phase B (epoch 5+): full fine-tuning
+# 6. Early stopping (patience=10 on val AUROC)
+# 7. Test set pe evaluate, report print
+
+# Expected final output:
+# ============================================================
+#   T-HetGAT Evaluation Results
+# ============================================================
+#   AUROC   : X.XXXX  ([BEATS] baseline 0.9804)
+#   Best F1 : X.XXXX  ([BEATS] baseline 0.4912)
+# ============================================================
+
+# Time: ~3-7 hours
+# Checkpoints: models/thetgat/thetgat_best.pt
+# Results:     models/thetgat/thetgat_eval_results.json
+```
+
+## Step 8: FastAPI Backend
+
+```bash
+# Docker services chal rahe honein chahiye (Step 3)
+uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# API: http://localhost:8000
+# Docs: http://localhost:8000/docs
+```
+
+## Step 9: SOC Dashboard
+
+```bash
+cd frontend
+npm install    # Pehli baar hi
+npm run dev
+
+# Dashboard: http://localhost:3000
+```
+
+## Quick Reference — Saare Commands ek jagah:
+
+```bash
+# Hamesha pehle venv activate karo
+venv\Scripts\activate         # Windows
+source venv/bin/activate      # Linux/Mac
+
+# Infrastructure
+docker-compose up -d          # Saare services start
+docker-compose down           # Band karo
+
+# AI Training (is order mein chalao)
+python -m src.models.pretrain.runner          # Module 8 (~2 ghante)
+python -m src.models.baseline_runner          # Module 9 (~20 min)
+python -m src.models.thetgat.runner           # Module 11 (~3-7 ghante)
+
+# Services
+uvicorn src.api.main:app --reload --port 8000  # FastAPI
+cd frontend && npm run dev                      # Dashboard (port 3000)
+
+# Results dekhne ke liye
+cat models/thetgat/thetgat_eval_results.json
+```
+
+## Saari files run ke baad:
+
+```
+models/
+├── pretrain/
+│   ├── checkpoint_best.pt        ← Pre-trained encoder (Module 8)
+│   └── checkpoint_latest.pt
+├── baseline/
+│   ├── node2vec.pt               ← IP embeddings (Module 9)
+│   ├── iso_forest.joblib         ← Trained Isolation Forest
+│   ├── oc_svm.joblib             ← Trained One-Class SVM
+│   ├── scaler.joblib             ← StandardScaler
+│   └── baseline_results.json     ← AUROC=0.9804 etc.
+└── thetgat/
+    ├── thetgat_best.pt           ← Best T-HetGAT model (Module 11)
+    ├── thetgat_latest.pt         ← Latest checkpoint
+    ├── thetgat_train_history.json ← Har epoch ke metrics
+    └── thetgat_eval_results.json  ← Final test results
+```
+
+---
+
+*Document updated: 18 March 2026 | GraphRL-Sec MTech Dissertation*
