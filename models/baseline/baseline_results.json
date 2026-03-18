@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-03-18T04:52:26.762498+00:00",
+  "num_ips": 19179,
+  "num_attack_ips": 27,
+  "attack_ratio": 0.001408,
+  "isolation_forest": {
+    "auroc": 0.9804,
+    "f1": 0.4912,
+    "precision": 0.4667,
+    "recall": 0.5185,
+    "avg_precision": 0.3332,
+    "best_threshold": 0.218148
+  },
+  "one_class_svm": {
+    "auroc": 0.9609,
+    "f1": 0.6531,
+    "precision": 0.7273,
+    "recall": 0.5926,
+    "avg_precision": 0.4207,
+    "best_threshold": 7.033818
+  },
+  "feature_config": {
+    "structural_features": 12,
+    "embedding_dim": 64,
+    "total_features": 76
+  }
+}
